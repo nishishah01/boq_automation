@@ -1,0 +1,531 @@
+{
+ "provenance": "Written by the developer against real Item Master records. NOT engineer-verified; have a BOQ engineer review it before quoting accuracy from it.",
+ "lines": [
+  {
+   "unique_no": "1.1.1.2",
+   "description": "2.5 Tr - FDMF30CRV16",
+   "cost_sheet_type": "Highside Supply",
+   "case": "model, section context",
+   "expected": [
+    [
+     {
+      "item_no": "CO-01170",
+      "item_brief": "DAIKIN FDMF30CRV16 IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.1.1.3",
+   "description": "11.0 Tr - FDR130GRV16",
+   "cost_sheet_type": "Highside Supply",
+   "case": "model absent; near-identical models must be rejected",
+   "expected": []
+  },
+  {
+   "unique_no": "1.1.2.1",
+   "description": "38 HP - RXQ38BRY16",
+   "cost_sheet_type": "Highside Supply",
+   "case": "model and capacity",
+   "expected": [
+    [
+     {
+      "item_no": "CO-21405",
+      "item_brief": "DAIKIN RXQ38BRY16 ODU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.1.2.2",
+   "description": "22 HP - RXQ22BRY16",
+   "cost_sheet_type": "Highside Supply",
+   "case": "model and capacity; two records share the model",
+   "expected": [
+    [
+     {
+      "item_no": "CO-21726",
+      "item_brief": "DAIKIN RXQ22BRY16 ODU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-13681",
+      "item_brief": "DAIKIN RXQ22BRY16 VRV ALFA ODU",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.1.2.3",
+   "description": "16 HP - RXQ16BRY16",
+   "cost_sheet_type": "Highside Supply",
+   "case": "model and capacity",
+   "expected": [
+    [
+     {
+      "item_no": "CO-21725",
+      "item_brief": "DAIKIN RXQ16BRY16 ODU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.1.3.1",
+   "description": "Hi-Wall FXAQ32ARVE6",
+   "cost_sheet_type": "Highside Supply",
+   "case": "ambiguous: duplicate records in master",
+   "expected": [
+    [
+     {
+      "item_no": "CO-01262",
+      "item_brief": "DAIKIN FXAQ32ARVE6 IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-19703",
+      "item_brief": "DAIKIN FXAQ32ARVE6 IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-19704",
+      "item_brief": "DAIKIN FXAQ32ARVE6 IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-16547",
+      "item_brief": "DAIKIN FXAQ32ARVE6",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.1.3.2",
+   "description": "Ductable FXMQ50ARV16 1.65 TR",
+   "cost_sheet_type": "Highside Supply",
+   "case": "ambiguous: duplicate records in master",
+   "expected": [
+    [
+     {
+      "item_no": "CO-19485",
+      "item_brief": "DAIKIN FXMQ50ARV16 IDU UNIT 1.65 TR",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-19484",
+      "item_brief": "DAIKIN FXMQ50ARV16 IDU UNIT 1.65 TR",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-19483",
+      "item_brief": "DAIKIN FXMQ50ARV16 IDU UNIT 1.6 5 TR",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-01427",
+      "item_brief": "DAIKIN FXMQ50ARV16 IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.2.1",
+   "description": "Mitsubishi MS-GK18VA Indoor Unit",
+   "cost_sheet_type": "Highside Supply",
+   "case": "make and hyphenated model",
+   "expected": [
+    [
+     {
+      "item_no": "CO-02606",
+      "item_brief": "MITSUBISHI MS-GK18VA IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.2.2",
+   "description": "Mitsubishi FDTS71GA-W6 Indoor Unit",
+   "cost_sheet_type": "Highside Supply",
+   "case": "make and hyphenated model",
+   "expected": [
+    [
+     {
+      "item_no": "CO-17135",
+      "item_brief": "MITSUBISHI FDTS71GA-W6 IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.3.1",
+   "description": "Ductable Unit 8 TR",
+   "cost_sheet_type": "Highside Supply",
+   "case": "capacity",
+   "expected": [
+    [
+     {
+      "item_no": "CO-16804",
+      "item_brief": "DUCTABLE UNIT 8 TR",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.3.2",
+   "description": "Ductable Unit 4 TR",
+   "cost_sheet_type": "Highside Supply",
+   "case": "capacity",
+   "expected": [
+    [
+     {
+      "item_no": "CO-16807",
+      "item_brief": "DUCTABLE UNIT 4 TR",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.3.3",
+   "description": "Ductable Unit 6 TR",
+   "cost_sheet_type": "Highside Supply",
+   "case": "capacity absent; other TR must be rejected",
+   "expected": []
+  },
+  {
+   "unique_no": "1.3.4",
+   "description": "Outdoor Unit 4 TR",
+   "cost_sheet_type": "Highside Supply",
+   "case": "synonym and capacity",
+   "expected": [
+    [
+     {
+      "item_no": "CO-16797",
+      "item_brief": "OUTDOOR UNIT 4 TR",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.3.5",
+   "description": "4 Way Cassette Unit 1.6 TR",
+   "cost_sheet_type": "Highside Supply",
+   "case": "capacity",
+   "expected": [
+    [
+     {
+      "item_no": "CO-16800",
+      "item_brief": "4 WAY CASSETTE UNIT 1.6 TR",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.4.1",
+   "description": "Supply of Air Handling Unit 10000 CFM",
+   "cost_sheet_type": "Highside Supply",
+   "case": "synonym and capacity",
+   "expected": [
+    [
+     {
+      "item_no": "CO-19138",
+      "item_brief": "AHU 10000 CFM",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.4.2",
+   "description": "Supply of AHU 4000 CFM",
+   "cost_sheet_type": "Highside Supply",
+   "case": "capacity",
+   "expected": [
+    [
+     {
+      "item_no": "CO-19132",
+      "item_brief": "AHU 4000 CFM",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.5.1",
+   "description": "Supply & Installation of Daikin FXFSQ125ARV16 IDU Unit",
+   "cost_sheet_type": "Highside Supply",
+   "case": "combined supply and installation",
+   "expected": [
+    [
+     {
+      "item_no": "CO-01354",
+      "item_brief": "DAIKIN FXFSQ125ARV16 IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-20086",
+      "item_brief": "DAIKIN FXFSQ125ARV16 UNIT",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ],
+    [
+     {
+      "item_no": "CO-11786",
+      "item_brief": "INSTALLATION OF  DAIKIN FXFSQ125ARV16 IDU UNIT",
+      "cost_sheet_type": "Highside Installation"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.5.2",
+   "description": "SITC of Daikin FDMF30CRV16 IDU Unit",
+   "cost_sheet_type": "Highside Supply",
+   "case": "combined; SITC abbreviation",
+   "expected": [
+    [
+     {
+      "item_no": "CO-01170",
+      "item_brief": "DAIKIN FDMF30CRV16 IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ],
+    [
+     {
+      "item_no": "CO-18012",
+      "item_brief": "INSTALLATION OF DAIKIN FDMF30CRV16 IDU UNIT",
+      "cost_sheet_type": "Highside Installation"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.5.3",
+   "description": "Supply and Installation of Daikin RR100ERY16 IDU Unit",
+   "cost_sheet_type": "Highside Supply",
+   "case": "combined supply and installation",
+   "expected": [
+    [
+     {
+      "item_no": "CO-01551",
+      "item_brief": "DAIKIN RR100ERY16 IDU UNIT",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ],
+    [
+     {
+      "item_no": "CO-04045",
+      "item_brief": "INSTALLATION DAIKIN RR100ERY16 IDU UNIT",
+      "cost_sheet_type": "Highside Installation"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.6.1",
+   "description": "Installation of Daikin FDMF30CRV16 IDU Unit",
+   "cost_sheet_type": "Highside Installation",
+   "case": "installation only",
+   "expected": [
+    [
+     {
+      "item_no": "CO-18012",
+      "item_brief": "INSTALLATION OF DAIKIN FDMF30CRV16 IDU UNIT",
+      "cost_sheet_type": "Highside Installation"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.6.2",
+   "description": "Installation of Mitsubishi Tower Unit",
+   "cost_sheet_type": "Highside Installation",
+   "case": "installation only; master typo",
+   "expected": [
+    [
+     {
+      "item_no": "CO-07738",
+      "item_brief": "INSTALATION OF MITSUBISHI TOWER UNIT",
+      "cost_sheet_type": "Highside Installation"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.6.3",
+   "description": "Installation of Daikin FXFSQ32ARV16 IDU Unit",
+   "cost_sheet_type": "Highside Installation",
+   "case": "master lists an equipment record as installation; must go to review",
+   "expected": [
+    [
+     {
+      "item_no": "CO-01358",
+      "item_brief": "DAIKIN FXFSQ32ARV16 IDU UNIT",
+      "cost_sheet_type": "Highside Installation"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.7.1",
+   "description": "Supply of Armoured Cable 6 Sqmm x 4 Core",
+   "cost_sheet_type": "Highside Supply",
+   "case": "cable size",
+   "expected": [
+    [
+     {
+      "item_no": "CO-16773",
+      "item_brief": "ARMOURED CABLE 6 SQMM X 4 CORE",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.7.2",
+   "description": "Supply of Armoured Cable 10 Sqmm x 4 Core",
+   "cost_sheet_type": "Highside Supply",
+   "case": "cable size",
+   "expected": [
+    [
+     {
+      "item_no": "CO-16772",
+      "item_brief": "ARMOURED CABLE 10 SQMM X 4 CORE",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.7.3",
+   "description": "Refnet Joint KHRP26A32T6",
+   "cost_sheet_type": "Highside Supply",
+   "case": "model",
+   "expected": [
+    [
+     {
+      "item_no": "CO-19878",
+      "item_brief": "REFNET KHRP26A32T6",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.7.4",
+   "description": "Daikin Remote Controller BRC7M530W6",
+   "cost_sheet_type": "Highside Supply",
+   "case": "model",
+   "expected": [
+    [
+     {
+      "item_no": "CO-14013",
+      "item_brief": "DAIKIN REMOTE CONTROLLER BRC7M530W6",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.7.5",
+   "description": "Gas Tight Joint SDGTC1915",
+   "cost_sheet_type": "Highside Supply",
+   "case": "model; near-duplicate records",
+   "expected": [
+    [
+     {
+      "item_no": "CO-14596",
+      "item_brief": "GAS TIGHT JOINT SDGTC1915",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-21245",
+      "item_brief": "GAS TIGHT JOINT - SDGTC1915",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.7.6",
+   "description": "GI Cable Tray 150 mm",
+   "cost_sheet_type": "Highside Supply",
+   "case": "material and size",
+   "expected": [
+    [
+     {
+      "item_no": "CO-18004",
+      "item_brief": "GI CABLE TRAY 150 MM",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.7.7",
+   "description": "2 Way Motorised Valve 200 mm",
+   "cost_sheet_type": "Highside Supply",
+   "case": "size",
+   "expected": [
+    [
+     {
+      "item_no": "CO-16146",
+      "item_brief": "2 WAY MOTORISED VALVE 200 MM",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.7.8",
+   "description": "Refrigerant Piping 34.9 mm with Insulation",
+   "cost_sheet_type": "Highside Supply",
+   "case": "multiple components; explicit insulation",
+   "expected": [
+    [
+     {
+      "item_no": "CO-21711",
+      "item_brief": "REFRIGERANT PIPING 34.9 MM",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ],
+    [
+     {
+      "item_no": "CO-19622",
+      "item_brief": "INSULATION",
+      "cost_sheet_type": "Highside Supply"
+     },
+     {
+      "item_no": "CO-02250",
+      "item_brief": "Insulation",
+      "cost_sheet_type": "Highside Supply"
+     }
+    ]
+   ]
+  },
+  {
+   "unique_no": "1.8.1",
+   "description": "Water Cooled Screw Chiller 300 TR",
+   "cost_sheet_type": "Highside Supply",
+   "case": "no match: chillers are Lowside in the master",
+   "expected": []
+  },
+  {
+   "unique_no": "1.8.2",
+   "description": "Cooling Tower 500 TR",
+   "cost_sheet_type": "Highside Supply",
+   "case": "no match: cooling towers are Lowside in the master",
+   "expected": []
+  }
+ ]
+}

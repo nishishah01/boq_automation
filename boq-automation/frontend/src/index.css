@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; }
+  body { @apply bg-canvas text-[14px] text-slate-700; }
+  h1, h2, h3 { @apply text-slate-900; }
+  :focus-visible { @apply outline-none ring-2 ring-brand-500/40 ring-offset-1; }
+}
+
+@layer components {
+  .card { @apply rounded-xl border border-slate-200/80 bg-white shadow-card; }
+  .btn { @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-medium
+    transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-45; }
+  .btn-primary { @apply bg-brand-600 text-white shadow-sm hover:bg-brand-700; }
+  .btn-secondary { @apply border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-slate-400 hover:bg-slate-50; }
+  .btn-ghost { @apply text-slate-600 hover:bg-slate-100 hover:text-slate-900; }
+  .btn-danger { @apply border border-red-200 bg-white text-red-700 hover:bg-red-50; }
+  .btn-sm { @apply rounded-md px-2.5 py-1.5 text-[13px]; }
+  .btn-icon { @apply rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800; }
+  .input { @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400
+    transition focus:border-brand-500 focus:outline-none focus:ring-4 focus:ring-brand-500/10; }
+  .label { @apply mb-1.5 block text-[13px] font-medium text-slate-700; }
+  .eyebrow { @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500; }
+  .table-head th { @apply whitespace-nowrap px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500; }
+  .table-row td { @apply px-4 py-3 align-middle text-sm; }
+}
