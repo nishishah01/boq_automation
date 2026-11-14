@@ -1,35 +1,27 @@
-import { createContext, ReactNode, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, X } from "lucide-react";
 import { Modal } from "./ui";
 
-type Toast = { id: number; kind: "success" | "error"; text: string };
-type Confirm = { title: string; text: ReactNode; action: string; danger?: boolean };
+const Ctx = createContext(null);
 
-interface Feedback {
-  notify: (text: string, kind?: Toast["kind"]) => void;
-  confirm: (c: Confirm) => Promise<boolean>;
-}
-
-const Ctx = createContext<Feedback | null>(null);
-
-export function FeedbackProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [pending, setPending] = useState<Confirm | null>(null);
-  const resolver = useRef<(ok: boolean) => void>();
+export function FeedbackProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+  const [pending, setPending] = useState(null);
+  const resolver = useRef();
   const next = useRef(0);
 
-  const notify = useCallback((text: string, kind: Toast["kind"] = "success") => {
+  const notify = useCallback((text, kind = "success") => {
     const id = ++next.current;
     setToasts((t) => [...t, { id, kind, text }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), kind === "error" ? 7000 : 3500);
   }, []);
 
-  const confirm = useCallback((c: Confirm) => {
+  const confirm = useCallback((c) => {
     setPending(c);
-    return new Promise<boolean>((resolve) => { resolver.current = resolve; });
+    return new Promise((resolve) => { resolver.current = resolve; });
   }, []);
 
-  const close = (ok: boolean) => { resolver.current?.(ok); setPending(null); };
+  const close = (ok) => { resolver.current?.(ok); setPending(null); };
 
   return (
     <Ctx.Provider value={{ notify, confirm }}>

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.services.ai_matching import claude_evaluator
-from app.services.ai_matching.claude_evaluator import ClaudeLineResult, ClaudeRequirements, ClaudeSelection, ClaudeUnavailable
+from app.services.ai_matching.claude_evaluator import ClaudeLineResult, ClaudeRequirements, ClaudeSelection, AIUnavailable
 from app.services.ai_matching.engine import AI_UNAVAILABLE_FLAG, MatchConfig, MatchingEngine
 from app.services.ai_matching.requirements import build_requirement
 from app.services.item_master.normalize import canon, extract_attrs, extract_models
@@ -223,7 +223,7 @@ def test_claude_selection_uses_master_values(indexes, line, monkeypatch):
 
 
 def test_claude_failure_degrades_to_rules_and_forces_review(indexes, line, monkeypatch):
-    monkeypatch.setattr(claude_evaluator, "evaluate", FakeClaude(ClaudeUnavailable("Claude rate limited")))
+    monkeypatch.setattr(claude_evaluator, "evaluate", FakeClaude(AIUnavailable("Claude rate limited")))
     r = MatchingEngine(indexes, MatchConfig(["Highside Supply"], mode="claude")).match_line(line("1.1.2.1"))
     assert r.engine == "rule" and r.selections[0].component.item_no == "CO-21405"
     assert AI_UNAVAILABLE_FLAG in r.selections[0].flags

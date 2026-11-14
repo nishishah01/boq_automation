@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpenCheck, Sparkles } from "lucide-react";
 import { api, errorText } from "../services/api";
 import { useWork } from "../context/WorkContext";
 import { dateText, Empty, engineName, ErrorNote, MetricStrip, PageHeader, Spinner, Status } from "../components/ui";
-import type { Dashboard } from "../types";
 
 export default function DashboardPage() {
-  const [data, setData] = useState<Dashboard | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
   const { setJobId, progress } = useWork();
   const navigate = useNavigate();
   useEffect(() => { api.dashboard().then(setData).catch((e) => setError(errorText(e))); }, []);
@@ -41,10 +40,24 @@ export default function DashboardPage() {
           <MetricStrip items={[
             { label: "BOQ files", value: data.boq_files },
             { label: "Descriptions mapped", value: data.parent_descriptions },
+            { label: "Skipped: no unit/qty", value: data.skipped_unit_qty ?? 0 },
             { label: "Components suggested", value: data.components_mapped },
             { label: "Approved", value: data.approved, tone: "good" },
             { label: "Awaiting review", value: data.pending, tone: data.pending ? "warn" : undefined },
           ]} />
+
+          <div className="card mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600"><BookOpenCheck size={18} /></div>
+              <div><div className="text-sm font-semibold text-slate-900">Knowledge base</div>
+                <div className="text-xs text-slate-500">Verified BOQs take priority over the Item Master</div></div>
+            </div>
+            {[["Verified BOQs indexed", data.knowledge?.files?.indexed ?? 0], ["Verified descriptions", data.knowledge?.historical_parents ?? 0],
+              ["Approved in review", data.knowledge?.feedback_parents ?? 0], ["Items reclassified vs master", data.knowledge?.items_reclassified_vs_master ?? 0]].map(([k, v]) => (
+              <div key={k}><div className="text-xs text-slate-500">{k}</div><div className="text-lg font-semibold tabular-nums text-slate-900">{v}</div></div>
+            ))}
+            <Link className="btn btn-secondary btn-sm ml-auto" to="/knowledge">Manage</Link>
+          </div>
 
           <h2 className="mb-3 mt-8 text-[15px] font-semibold">Recent runs</h2>
           {data.recent.length === 0 ? <Empty title="No runs yet" text="Runs appear here once mapping has started." action={<Link className="btn btn-primary" to="/upload">Get started</Link>} /> : (

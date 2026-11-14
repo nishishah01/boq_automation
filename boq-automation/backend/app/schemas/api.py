@@ -1,12 +1,9 @@
+from typing import Literal
 from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict, Field
-
-
 class ORM(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-
-
+    
 class BOQUploadOut(ORM):
     id: int
     filename: str
@@ -38,6 +35,8 @@ class JobCreate(BaseModel):
     suggest_inferred: bool = True
     manual_low_confidence: bool = True
     reprocess_mapped: bool = False
+    # A quantity of 0: "review" maps the line and flags every suggestion; "skip" leaves it unmapped.
+    zero_quantity: Literal["review", "skip"] = "review"
 
 
 class JobOut(ORM):
@@ -70,6 +69,11 @@ class MappingOut(ORM):
     flags: list
     source: str
     status: str
+    master_cost_sheet_type: str | None = ""
+    ai_cost_sheet_type: str | None = ""
+    classification_source: str | None = "item_master"
+    classification_note: str | None = ""
+    evidence: list | None = []
 
 
 class DescriptionOut(ORM):
@@ -117,6 +121,97 @@ class RequirementsEdit(BaseModel):
 
 class MarkIncorrect(BaseModel):
     note: str = ""
+
+
+class Reclassify(BaseModel):
+    cost_sheet_type: str
+    note: str = ""
+
+
+class HistoricalOut(ORM):
+    id: int
+    filename: str
+    size_bytes: int
+    status: str
+    error: str | None
+    verified: bool
+    parents_count: int
+    components_count: int
+    highside_supply_count: int = 0
+    highside_installation_count: int = 0
+    out_of_scope_count: int = 0
+    summary: dict
+    origin: str = "upload"
+    source_path: str = ""
+    relative_path: str = ""
+    folder: str = ""
+    scan_id: int | None = None
+    duplicate_of: int | None = None
+    attempts: int = 0
+    sha256: str = ""
+    created_at: datetime
+    processed_at: datetime | None
+
+
+class ScanIn(BaseModel):
+    root_path: str
+    reprocess_changed: bool = True
+
+
+class ScanOut(ORM):
+    id: int
+    root_path: str
+    status: str
+    reprocess_changed: bool
+    folders_scanned: int
+    files_discovered: int
+    supported_files: int
+    unsupported_files: int
+    temporary_files: int
+    duplicate_files: int
+    unreadable_files: int
+    new_files: int
+    changed_files: int
+    unchanged_files: int
+    to_process: int
+    processed: int
+    summary: dict
+    error: str | None
+    created_at: datetime
+    finished_at: datetime | None
+
+
+class KnowledgeComponentOut(ORM):
+    item_no: str
+    item_brief: str
+    cost_sheet_type: str
+    class_name: str
+    master_cost_sheet_type: str
+    resolved_cost_sheet_type: str = ""
+    type_source: str = ""
+    in_scope: bool = True
+    in_master: bool
+    row_number: int = 0
+    uom: str = ""
+    quantity: float = 0
+
+
+class KnowledgeParentOut(ORM):
+    id: int
+    historical_id: int | None = None
+    filename: str = ""
+    sheet: str
+    row_number: int
+    unique_no: str
+    description: str
+    context: list
+    uom: str
+    quantity: float
+    cost_sheet_type: str = ""
+    in_scope: bool = True
+    method: str = ""
+    created_at: datetime | None = None
+    components: list[KnowledgeComponentOut]
 
 
 class ExportOut(ORM):

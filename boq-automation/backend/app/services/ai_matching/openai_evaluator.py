@@ -5,6 +5,7 @@ answer, and the same downstream validation against the Item Master before anythi
 exported. The prompt is shared so both providers are judged on the same instructions.
 """
 import json
+from functools import lru_cache
 from typing import Literal
 
 import openai
@@ -12,7 +13,7 @@ from pydantic import BaseModel
 
 from app.core.config import get_settings
 
-from .claude_evaluator import SYSTEM, AIUnavailable, ClaudeLineResult
+from .claude_evaluator import SYSTEM, AIUnavailable, ClaudeLineResult, ScopeCategory
 
 
 # OpenAI strict structured output wants every field required (nullable instead of
@@ -41,12 +42,19 @@ class _LineResult(BaseModel):
     unresolved: list[str]
     needs_review: bool
     review_reason: str | None
+    scope_category: ScopeCategory | None = None  # the SDK still lists it as required (nullable)
+
+
+@lru_cache(maxsize=1)
+def _shared_client(api_key: str | None, timeout_s: int) -> openai.OpenAI:
+    """One client for the process (connection reuse), with a bounded wait per call."""
+    return openai.OpenAI(api_key=api_key, timeout=timeout_s, max_retries=1)
 
 
 def evaluate(payload: dict, client: openai.OpenAI | None = None) -> ClaudeLineResult:
     """One line, one call. Raises AIUnavailable so the engine can degrade to rule scoring."""
     settings = get_settings()
-    client = client or openai.OpenAI(api_key=settings.openai_api_key)
+    client = client or _shared_client(settings.openai_api_key, settings.ai_timeout_seconds)
     try:
         completion = client.chat.completions.parse(
             model=settings.openai_model,

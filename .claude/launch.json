@@ -1,0 +1,75 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api-check",
+      "runtimeExecutable": "C:\\Users\\EIS\\OneDrive\\Desktop\\BOQ Component Mapping\\boq-automation\\backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--port",
+        "8011",
+        "--app-dir",
+        "boq-automation/backend"
+      ],
+      "port": 8011,
+      "env": {
+        "DATABASE_URL": "sqlite:///C:/Users/EIS/AppData/Local/Temp/claude/b9920d394eb3e9aa/5f516e6f-6c33-417a-88c4-fb9fb52cc723/scratchpad/checkdata/check.db",
+        "STORAGE_DIR": "C:/Users/EIS/AppData/Local/Temp/claude/b9920d394eb3e9aa/5f516e6f-6c33-417a-88c4-fb9fb52cc723/scratchpad/checkdata/storage",
+        "AI_MODE": "mock",
+        "BOQ_ENV_FILE": "C:/Users/EIS/AppData/Local/Temp/claude/b9920d394eb3e9aa/5f516e6f-6c33-417a-88c4-fb9fb52cc723/scratchpad/checkdata/none.env"
+      },
+      "cwd": "boq-automation/backend"
+    },
+    {
+      "name": "web-check",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "boq-automation/frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174,
+      "env": {
+        "VITE_API_PROXY": "http://127.0.0.1:8011"
+      }
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "C:\\Users\\EIS\\OneDrive\\Desktop\\BOQ Component Mapping\\boq-automation\\backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "app.main:app",
+        "--port",
+        "8001"
+      ],
+      "port": 8001,
+      "cwd": "boq-automation/backend"
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "boq-automation/frontend",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5174",
+        "--strictPort"
+      ],
+      "port": 5174,
+      "env": {
+        "VITE_API_PROXY": "http://127.0.0.1:8001"
+      }
+    }
+  ]
+}

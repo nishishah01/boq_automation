@@ -4,7 +4,7 @@ import { engineName, PageHeader, Spinner } from "../components/ui";
 export default function SettingsPage() {
   const { options } = useWork();
   if (!options) return <Spinner />;
-  const groups: [string, [string, string][]][] = [
+  const groups = [
     ["Matching", [
       ["Engine", options.ai_mode !== "mock" ? `${engineName(options.ai_mode)} (${options.model})`
         : "Rule-based. Set ANTHROPIC_API_KEY, or AI_PROVIDER=openai or gemini with that provider's key, in backend/.env"],
@@ -12,7 +12,9 @@ export default function SettingsPage() {
       ["Default confidence threshold", `${options.defaults.confidence_threshold}%`],
       ["Alternatives kept per item", String(options.defaults.max_candidates)],
     ]],
-    ["Scope", [["Cost Sheet Types available", options.cost_sheet_types.map((t) => t.name).join(", ")]]],
+    ["Scope", [["Cost Sheet Types automated", options.cost_sheet_types.map((t) => t.name).join(", ")],
+      ["Other types", "Recognised and flagged for review, never mapped automatically. Enable more in ENABLED_COST_SHEET_TYPES."]]],
+    ["Knowledge priority", [["Order", "1. Verified historical BOQs  2. Approved review corrections  3. Item Master  4. AI inference"]]],
     ["System", [["Database", options.database === "postgresql" ? "PostgreSQL" : "SQLite (development)"]]],
   ];
   return (

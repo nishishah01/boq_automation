@@ -1,15 +1,15 @@
-import { ReactNode, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Eye, FileSpreadsheet, Library, ShieldCheck } from "lucide-react";
 import { api, errorText } from "../services/api";
 import { useWork } from "../context/WorkContext";
 import { useFeedback } from "../components/feedback";
 import { ErrorNote, FileDrop, FileSummary, Guide, Modal, PageHeader, PreviewTable, Spinner } from "../components/ui";
-import type { BoqUpload, ItemMasterUpload } from "../types";
+import ColumnMapping, { layoutOf, LayoutStatus } from "../components/ColumnMapping";
 
-const mb = (n: number) => `${(n / 1024 / 1024).toFixed(2)} MB`;
+const mb = (n) => `${(n / 1024 / 1024).toFixed(2)} MB`;
 
-function Panel({ icon, title, text, children }: { icon: ReactNode; title: string; text: string; children: ReactNode }) {
+function Panel({ icon, title, text, children }) {
   return (
     <section className="card flex flex-col p-6">
       <div className="mb-5 flex items-start gap-3">
@@ -21,9 +21,7 @@ function Panel({ icon, title, text, children }: { icon: ReactNode; title: string
   );
 }
 
-function Previous<T extends { id: number; filename: string }>({ items, value, onPick, label }: {
-  items: T[]; value: number | null; onPick: (id: number) => void; label: (t: T) => string;
-}) {
+function Previous({ items, value, onPick, label }) {
   if (items.length < 2 && items.some((i) => i.id === value)) return null;
   if (!items.length) return null;
   return (
@@ -38,14 +36,15 @@ export default function UploadPage() {
   const { boqId, setBoqId, masterId, setMasterId, refreshProgress } = useWork();
   const { notify } = useFeedback();
   const navigate = useNavigate();
-  const [boqs, setBoqs] = useState<BoqUpload[]>([]);
-  const [masters, setMasters] = useState<ItemMasterUpload[]>([]);
-  const [busy, setBusy] = useState<"boq" | "master" | null>(null);
+  const [boqs, setBoqs] = useState([]);
+  const [masters, setMasters] = useState([]);
+  const [busy, setBusy] = useState(null);
   const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  const [replacing, setReplacing] = useState<"boq" | "master" | null>(null);
-  const [preview, setPreview] = useState<{ sheet: string; rows: string[][] } | null>(null);
+  const [error, setError] = useState(null);
+  const [replacing, setReplacing] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [previewing, setPreviewing] = useState(false);
+  const [mapping, setMapping] = useState(false);
 
   const loadMasters = () => api.itemMasters().then(setMasters).catch((e) => setError(errorText(e)));
   useEffect(() => { api.boqUploads().then(setBoqs).catch((e) => setError(errorText(e))); loadMasters(); }, []); // eslint-disable-line
@@ -60,13 +59,15 @@ export default function UploadPage() {
   }, [master?.status]); // eslint-disable-line
   useEffect(() => { if (master?.status === "ready") refreshProgress(); }, [master?.status]); // eslint-disable-line
 
-  async function upload(kind: "boq" | "master", f: File) {
+  async function upload(kind, f) {
     setBusy(kind); setError(null); setProgress(0);
     try {
       if (kind === "boq") {
         const u = await api.uploadBoq(f, setProgress);
         setBoqs([u, ...boqs]); setBoqId(u.id);
-        notify(`${u.filename} uploaded. Worksheet "${u.selected_sheet}" will be processed.`);
+        const lay = layoutOf(u);
+        if (lay?.needs_mapping) { setMapping(true); notify(`${u.filename} uploaded. Please confirm its columns.`); }
+        else notify(`${u.filename} uploaded. Worksheet "${u.selected_sheet}" will be processed.`);
       } else {
         const u = await api.uploadItemMaster(f, setProgress);
         setMasters([u, ...masters]); setMasterId(u.id);
@@ -83,21 +84,23 @@ export default function UploadPage() {
     try { setPreview(await api.boqPreview(boq.id, boq.selected_sheet)); } catch (e) { setError(errorText(e)); } finally { setPreviewing(false); }
   }
 
-  const ready = boq && master?.status === "ready";
+  const ready = boq && !layoutOf(boq)?.needs_mapping && master?.status === "ready";
   return (
     <>
       <PageHeader eyebrow="Step 1" title="Upload files" subtitle="Your originals are never modified; the app works on copies."
         action={<button className="btn btn-primary" disabled={!ready} onClick={() => navigate("/mapping")}>Continue to mapping <ArrowRight size={15} /></button>} />
-      <Guide id="upload">Upload your BOQ workbook and Item Master workbook to begin component mapping.</Guide>
+      <Guide id="upload">Upload the BOQ to map and the Item Master. Completed, verified BOQs go to the <Link className="font-medium underline" to="/knowledge">knowledge base</Link> instead,
+        where they guide future mappings.</Guide>
       <ErrorNote text={error} />
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <Panel icon={<FileSpreadsheet size={18} />} title="BOQ workbook" text="The Sales BOM worksheet is found automatically.">
+        <Panel icon={<FileSpreadsheet size={18} />} title="BOQ workbook" text="Any BOQ layout with a description column. Worksheet and columns are detected automatically.">
           {boq && replacing !== "boq" ? (
             <>
-              <FileSummary name={boq.filename} status="ready"
+              <FileSummary name={boq.filename} status={layoutOf(boq)?.needs_mapping ? "review" : "ready"}
                 meta={`${mb(boq.size_bytes)} · Worksheet: ${boq.selected_sheet}`}
                 action={<button className="btn btn-ghost btn-sm" onClick={() => setReplacing("boq")}>Change</button>} />
+              <LayoutStatus upload={boq} onEdit={() => setMapping(true)} />
               <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-slate-500">
                 {boq.has_macros ? <span className="flex items-center gap-1.5"><ShieldCheck size={14} className="text-emerald-600" /> Macros detected; exports keep them intact</span> : <span />}
                 <button className="btn btn-ghost btn-sm" onClick={openPreview} disabled={previewing}><Eye size={14} /> {previewing ? "Loading" : "Preview"}</button>
@@ -111,7 +114,7 @@ export default function UploadPage() {
           )}
         </Panel>
 
-        <Panel icon={<Library size={18} />} title="Item Master" text="Item Nos, briefs and Cost Sheet Types come only from here.">
+        <Panel icon={<Library size={18} />} title="Item Master" text="Item Nos and descriptions come only from here. Its Cost Sheet Types apply unless verified BOQs say otherwise.">
           {master && replacing !== "master" ? (
             <FileSummary name={master.filename} status={master.status}
               meta={master.status === "ready" ? `${mb(master.size_bytes)} · ${master.record_count.toLocaleString()} records` : master.status === "failed" ? master.error ?? "Could not be read" : "Reading records…"}
@@ -126,6 +129,11 @@ export default function UploadPage() {
         </Panel>
       </div>
 
+      {mapping && boq && (
+        <ColumnMapping upload={boq} onClose={() => setMapping(false)}
+          onSaved={(u, sum) => { setBoqs(boqs.map((x) => (x.id === u.id ? u : x))); refreshProgress();
+            notify(`${sum.lines} BOQ items found in "${u.selected_sheet}".`); }} />
+      )}
       {preview && (
         <Modal title={`Preview: ${preview.sheet}`} subtitle="First rows of the worksheet that will be processed" size="lg" onClose={() => setPreview(null)}>
           {preview.rows.length ? <PreviewTable rows={preview.rows} /> : <Spinner />}

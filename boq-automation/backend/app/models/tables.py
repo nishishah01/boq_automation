@@ -125,6 +125,12 @@ class ComponentMapping(Base):
     flags: Mapped[list] = mapped_column(JSON, default=list)
     source: Mapped[str] = mapped_column(String(20), default="rule")  # rule claude openai gemini manual
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending review approved incorrect
+    # Classification traceability. cost_sheet_type above is the final value written on export.
+    master_cost_sheet_type: Mapped[str] = mapped_column(String(60), default="")  # as in the Item Master
+    ai_cost_sheet_type: Mapped[str] = mapped_column(String(60), default="")  # what the engine recommended
+    classification_source: Mapped[str] = mapped_column(String(20), default="item_master")  # historical feedback item_master manual
+    classification_note: Mapped[str] = mapped_column(Text, default="")
+    evidence: Mapped[list] = mapped_column(JSON, default=list)  # historical/feedback examples supporting it
     description: Mapped[BOQDescription] = relationship(back_populates="mappings")
 
 
@@ -154,3 +160,120 @@ class ExportRecord(Base):
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
     verification: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class HistoricalScan(Base):
+    """One scan of a folder of historical BOQs: the inventory it found and the progress of
+    ingesting what was new or changed. The folder itself is only ever read."""
+    __tablename__ = "historical_scans"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    root_path: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="scanning")  # scanning processing completed failed
+    reprocess_changed: Mapped[bool] = mapped_column(Boolean, default=True)
+    folders_scanned: Mapped[int] = mapped_column(Integer, default=0)
+    files_discovered: Mapped[int] = mapped_column(Integer, default=0)  # every file, any type
+    supported_files: Mapped[int] = mapped_column(Integer, default=0)  # .xlsx / .xlsm
+    unsupported_files: Mapped[int] = mapped_column(Integer, default=0)
+    temporary_files: Mapped[int] = mapped_column(Integer, default=0)  # ~$ lock files, ignored
+    duplicate_files: Mapped[int] = mapped_column(Integer, default=0)  # byte-identical to another file
+    unreadable_files: Mapped[int] = mapped_column(Integer, default=0)
+    new_files: Mapped[int] = mapped_column(Integer, default=0)
+    changed_files: Mapped[int] = mapped_column(Integer, default=0)
+    unchanged_files: Mapped[int] = mapped_column(Integer, default=0)
+    to_process: Mapped[int] = mapped_column(Integer, default=0)
+    processed: Mapped[int] = mapped_column(Integer, default=0)
+    inventory: Mapped[list] = mapped_column(JSON, default=list)  # one entry per discovered file
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class HistoricalBOQ(Base):
+    """A previously completed, verified BOQ used as reference knowledge (never mapped itself).
+
+    status: queued (Pending) | processing | ingested (Successfully Ingested) | partial
+            (Partially Ingested) | no_mappings (readable, but no Highside mappings in it) |
+            failed | duplicate | changed (source file changed; waiting to be reprocessed)
+    """
+    __tablename__ = "historical_boqs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    filename: Mapped[str] = mapped_column(String(300))
+    stored_path: Mapped[str] = mapped_column(Text)  # read-only copy the extraction works from
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64), index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), default="", index=True)  # of the extracted mappings
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    error: Mapped[str | None] = mapped_column(Text)
+    verified: Mapped[bool] = mapped_column(Boolean, default=True)
+    parents_count: Mapped[int] = mapped_column(Integer, default=0)  # parent descriptions with Highside components
+    components_count: Mapped[int] = mapped_column(Integer, default=0)  # Highside component mappings
+    summary: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Where it came from: "upload" (Knowledge base page) or "folder" (folder scan).
+    origin: Mapped[str] = mapped_column(String(20), default="upload")
+    source_path: Mapped[str] = mapped_column(Text, default="")  # original file, for folder ingestion
+    relative_path: Mapped[str] = mapped_column(Text, default="")  # relative to the scanned root folder
+    folder: Mapped[str] = mapped_column(Text, default="")  # project folder, relative to the root
+    scan_id: Mapped[int | None] = mapped_column(ForeignKey("historical_scans.id", ondelete="SET NULL"))
+    source_mtime: Mapped[float] = mapped_column(Float, default=0)
+    duplicate_of: Mapped[int | None] = mapped_column(Integer)
+    highside_supply_count: Mapped[int] = mapped_column(Integer, default=0)
+    highside_installation_count: Mapped[int] = mapped_column(Integer, default=0)
+    out_of_scope_count: Mapped[int] = mapped_column(Integer, default=0)  # Lowside and other components seen
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    uploaded_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class KnowledgeParent(Base):
+    """One parent BOQ description with the components it was verified to need.
+
+    source "historical": extracted from an uploaded verified BOQ (highest priority).
+    source "feedback": approved in this app's review (second priority); one per reviewed line.
+    """
+    __tablename__ = "knowledge_parents"
+    __table_args__ = (Index("ix_kp_source", "source", "historical_id"), Index("ix_kp_desc", "description_id"))
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(20))
+    historical_id: Mapped[int | None] = mapped_column(ForeignKey("historical_boqs.id", ondelete="CASCADE"))
+    description_id: Mapped[int | None] = mapped_column(Integer)  # feedback: the reviewed BOQ line
+    job_id: Mapped[int | None] = mapped_column(Integer)
+    filename: Mapped[str] = mapped_column(String(300), default="")
+    sheet: Mapped[str] = mapped_column(String(120), default="")
+    row_number: Mapped[int] = mapped_column(Integer, default=0)
+    unique_no: Mapped[str] = mapped_column(String(40), default="")
+    description: Mapped[str] = mapped_column(Text)
+    context: Mapped[list] = mapped_column(JSON, default=list)
+    cost_sheet_type: Mapped[str] = mapped_column(String(60), default="")
+    uom: Mapped[str] = mapped_column(String(20), default="")
+    quantity: Mapped[float] = mapped_column(Float, default=0)
+    attrs: Mapped[dict] = mapped_column(JSON, default=dict)  # extracted technical attributes
+    verified: Mapped[bool] = mapped_column(Boolean, default=True)
+    # True when at least one component is Highside Supply / Installation (the enabled scope).
+    in_scope: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    method: Mapped[str] = mapped_column(String(20), default="")  # how parent and components were linked
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    components: Mapped[list["KnowledgeComponent"]] = relationship(
+        back_populates="parent", cascade="all, delete-orphan", order_by="KnowledgeComponent.id")
+
+
+class KnowledgeComponent(Base):
+    __tablename__ = "knowledge_components"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    parent_id: Mapped[int] = mapped_column(ForeignKey("knowledge_parents.id", ondelete="CASCADE"), index=True)
+    item_no: Mapped[str] = mapped_column(String(40), index=True)
+    item_brief: Mapped[str] = mapped_column(Text, default="")
+    cost_sheet_type: Mapped[str] = mapped_column(String(60), default="")  # as used in the verified BOQ
+    class_name: Mapped[str] = mapped_column(String(20), default="")
+    master_cost_sheet_type: Mapped[str] = mapped_column(String(60), default="")  # Item Master value at ingest
+    # The classification this mapping stands for: the BOQ's own value, or the Item Master's when
+    # the engineer left it blank. type_source says which (historical | item_master | none).
+    resolved_cost_sheet_type: Mapped[str] = mapped_column(String(60), default="", index=True)
+    type_source: Mapped[str] = mapped_column(String(20), default="historical")
+    in_scope: Mapped[bool] = mapped_column(Boolean, default=True)
+    in_master: Mapped[bool] = mapped_column(Boolean, default=True)
+    row_number: Mapped[int] = mapped_column(Integer, default=0)  # the component's own row in the source
+    uom: Mapped[str] = mapped_column(String(20), default="")
+    quantity: Mapped[float] = mapped_column(Float, default=0)
+    parent: Mapped[KnowledgeParent] = relationship(back_populates="components")

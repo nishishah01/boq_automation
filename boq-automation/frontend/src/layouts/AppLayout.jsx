@@ -1,10 +1,10 @@
-import { Check, LayoutGrid, Library, Menu, Settings, X } from "lucide-react";
+import { BookOpenCheck, Check, LayoutGrid, Menu, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useWork } from "../context/WorkContext";
 
 export default function AppLayout() {
-  const { options, progress, refreshProgress } = useWork();
+  const { progress, refreshProgress } = useWork();
   const [open, setOpen] = useState(false);
   const location = useLocation();
   useEffect(() => { refreshProgress(); setOpen(false); }, [location.pathname]); // eslint-disable-line
@@ -51,7 +51,7 @@ export default function AppLayout() {
 
       <div className="eyebrow px-5 pb-2 pt-7">Workspace</div>
       <div className="space-y-0.5 px-3">
-        {[{ to: "/", label: "Overview", icon: LayoutGrid }, { to: "/item-master", label: "Item Master", icon: Library },
+        {[{ to: "/", label: "Overview", icon: LayoutGrid }, { to: "/knowledge", label: "Knowledge base", icon: BookOpenCheck },
           { to: "/settings", label: "Settings", icon: Settings }].map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) => `flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13.5px] transition
             ${isActive ? "bg-white font-semibold text-slate-900 shadow-card ring-1 ring-slate-200/70" : "font-medium text-slate-600 hover:bg-white/70"}`}>

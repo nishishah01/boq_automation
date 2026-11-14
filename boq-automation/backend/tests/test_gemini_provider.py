@@ -83,6 +83,35 @@ def test_engine_falls_back_to_rules_when_gemini_fails(indexes, line):
     assert r.engine == "rule" and AI_UNAVAILABLE_FLAG in r.selections[0].flags
 
 
+def test_engine_stops_calling_a_failing_provider(indexes, line):
+    # A provider that is down must not make every remaining line wait for its own failure.
+    seen = {"calls": 0}
+
+    def handler(req: httpx2.Request) -> httpx2.Response:
+        seen["calls"] += 1
+        return httpx2.Response(400, json={"error": {"code": 400, "message": "nope", "status": "X"}})
+
+    client = genai.Client(api_key="test", http_options=types.HttpOptions(
+        httpx_client=httpx2.Client(transport=httpx2.MockTransport(handler))))
+    e = MatchingEngine(indexes, MatchConfig(["Highside Supply"], mode="gemini"), ai_client=client,
+                       ai_failure_limit=2)
+    results = [e.match_line(line("1.1.2.1")) for _ in range(4)]
+    assert seen["calls"] == 2
+    assert all(r.engine == "rule" and AI_UNAVAILABLE_FLAG in r.selections[0].flags for r in results)
+    assert any("skipped after 2 failed calls" in n for n in results[-1].notes)
+
+
+def test_engine_is_safe_to_share_between_threads(indexes, parsed):
+    from concurrent.futures import ThreadPoolExecutor
+    e = MatchingEngine(indexes, MatchConfig(["Highside Supply"], mode="gemini"), ai_client=fake_client(json.dumps(ANSWER)))
+    lines = parsed.lines * 3
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        parallel = list(pool.map(e.match_line, lines))
+    serial = [e.match_line(l) for l in lines]
+    assert [(r.status, [s.component.item_no for s in r.selections]) for r in parallel] == \
+           [(r.status, [s.component.item_no for s in r.selections]) for r in serial]
+
+
 def test_env_file_beats_a_machine_wide_variable(tmp_path, monkeypatch):
     # A stale Windows GEMINI_API_KEY must not replace the project's own key.
     env = tmp_path / ".env"

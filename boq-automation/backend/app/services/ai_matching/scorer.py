@@ -16,6 +16,8 @@ from .requirements import ScopeItem
 
 CAPACITY_UNSTATED_CAP = 44  # just below engine.MIN_SELECT_SCORE
 PRECEDENT_BONUS = 12
+HISTORY_BONUS = 24  # verified historical / approved use for a similar, compatible description
+STRONG_HISTORY = 0.75  # history strength at which verified practice decides among compatible items
 # Words that mark an item as equipment, whose price follows its stated capacity.
 EQUIPMENT_WORDS = {"UNIT", "AHU", "FCU", "ODU", "IDU", "CHILLER", "FAN", "PUMP", "DUCTABLE", "CASSETTE",
                    "HIWALL", "VRV", "TOWER", "COMPRESSOR", "CONDENSER", "BLOWER", "DEHUMIDIFIER", "HRV",
@@ -31,6 +33,7 @@ class Scored:
     warnings: list[str] = field(default_factory=list)
     model_hit: bool = False
     precedent: int = 0  # +1 approved before for this exact line, -1 marked wrong before
+    history: object = None  # knowledge.index.ItemEvidence when verified BOQs used this item for similar lines
 
     @property
     def rejected(self) -> bool:
@@ -50,8 +53,16 @@ def is_equipment(c: Component) -> bool:
     return bool(a.models or a.forms or a.sides or a.capacity or (c.token_set & EQUIPMENT_WORDS))
 
 
-def score_candidate(item: ScopeItem, req: Attrs, c: Component, sim: float, precedent: int = 0) -> Scored:
-    out = Scored(c, 0, precedent=precedent)
+def history_strength(ev) -> float:
+    """0..1: how closely and how consistently verified BOQs used this item for such a line."""
+    if ev is None:
+        return 0.0
+    return ev.best_similarity * min(1.0, 0.4 + ev.support)
+
+
+def score_candidate(item: ScopeItem, req: Attrs, c: Component, sim: float, precedent: int = 0,
+                    history=None) -> Scored:
+    out = Scored(c, 0, precedent=precedent, history=history)
     has = c.attrs
     points = 0.0
     capacity_unstated = False
@@ -195,8 +206,15 @@ def score_candidate(item: ScopeItem, req: Attrs, c: Component, sim: float, prece
         points += PRECEDENT_BONUS
         out.reasons.append("Approved by an engineer for this same BOQ line before")
 
+    strength = history_strength(history)
+    if strength:
+        points += HISTORY_BONUS * strength
+        out.reasons.append(history.summary())
     out.score = max(0, min(99, round(points)))
-    if capacity_unstated:
+    if strength >= STRONG_HISTORY and not out.conflicts:
+        # Verified practice outranks wording among technically compatible items.
+        out.score = max(out.score, min(97, round(70 + 25 * strength)))
+    if capacity_unstated and strength < STRONG_HISTORY:
         # Price follows capacity, so a capacity-less record stays a candidate an engineer can
         # pick but is never auto-selected for a line that states one.
         out.score = min(out.score, CAPACITY_UNSTATED_CAP)

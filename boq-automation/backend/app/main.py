@@ -8,19 +8,22 @@ from sqlalchemy import select
 
 from app.api.routes import router
 from app.core.config import get_settings
-from app.database.session import Base, SessionLocal, engine
+from app.database.session import SessionLocal, ensure_schema
 from app.models.tables import ProcessingHistory, now
+from app.services.knowledge import service as knowledge
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
 settings.storage_dir.mkdir(parents=True, exist_ok=True)
-Base.metadata.create_all(engine)
+ensure_schema()
 
 # A job running when the process stopped will never finish; say so rather than show it as live.
 with SessionLocal() as db:
     for job in db.scalars(select(ProcessingHistory).where(ProcessingHistory.status.in_(("queued", "running")))):
         job.status, job.error, job.finished_at = "failed", "Server restarted during processing", now()
     db.commit()
+# Historical BOQs queued or mid-way when the server stopped are picked up again.
+knowledge.resume_pending()
 
 app = FastAPI(title="BOQ Component Mapping")
 app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in settings.cors_origins.split(",")],

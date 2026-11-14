@@ -32,9 +32,11 @@ def _write(path: Path, title: str, headers: list[str], rows: list[list]) -> None
 
 def mapping_report(path: Path, rows: list[dict]) -> None:
     headers = ["BOQ Row", "Unique No", "Parent Description", "Sections", "Item No.", "Item Brief", "Cost Sheet Type",
-               "ClassName", "Confidence", "Selection", "Status", "Source", "Reason", "Flags"]
-    keys = ["row", "unique_no", "description", "context", "item_no", "item_brief", "cost_sheet_type", "class_name",
-            "confidence", "selection_type", "status", "source", "reason", "flags"]
+               "Item Master Cost Sheet Type", "Classified By", "ClassName", "Confidence", "Selection", "Status",
+               "Source", "Reason", "Historical Evidence", "Flags"]
+    keys = ["row", "unique_no", "description", "context", "item_no", "item_brief", "cost_sheet_type",
+            "master_cost_sheet_type", "classification_source", "class_name", "confidence", "selection_type",
+            "status", "source", "reason", "evidence", "flags"]
     _write(path, "Component Mapping", headers, [[r.get(k) for k in keys] for r in rows])
 
 

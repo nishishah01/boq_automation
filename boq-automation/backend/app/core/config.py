@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.8-flash"
 
+    # Lines sent to the AI provider at the same time. 1 = one after another (the old behaviour).
+    ai_concurrency: int = 6
+    # A call that takes longer than this fails over to rule scoring instead of stalling the job.
+    ai_timeout_seconds: int = 60
+    # After this many AI failures in a row (provider down or overloaded), the rest of the job
+    # uses rule scoring straight away. Those lines are flagged for manual review as usual.
+    ai_failure_limit: int = 3
+
     embedding_backend: str = "lsa"  # lsa | sentence-transformers
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
 

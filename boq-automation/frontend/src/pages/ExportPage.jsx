@@ -5,10 +5,9 @@ import { api, errorText } from "../services/api";
 import { useWork } from "../context/WorkContext";
 import { useFeedback } from "../components/feedback";
 import { dateText, Disclosure, Empty, ErrorNote, Guide, PageHeader, Spinner, Status } from "../components/ui";
-import type { Description, ExportRecord, Job } from "../types";
 import { inScope, live } from "../utils/status";
 
-function Downloads({ rec }: { rec: ExportRecord }) {
+function Downloads({ rec }) {
   return (
     <div className="flex flex-wrap gap-2">
       {rec.status === "verified" && <a className="btn btn-primary" href={api.downloadUrl(rec.id, "boq")}><Download size={15} /> Updated BOQ</a>}
@@ -18,7 +17,7 @@ function Downloads({ rec }: { rec: ExportRecord }) {
   );
 }
 
-function Latest({ rec }: { rec: ExportRecord }) {
+function Latest({ rec }) {
   const s = rec.summary;
   const c = rec.verification.checks ?? {};
   const ok = rec.status === "verified";
@@ -40,8 +39,9 @@ function Latest({ rec }: { rec: ExportRecord }) {
         </div>
       </div>
       <div className="grid grid-cols-2 border-t border-slate-100 text-sm sm:grid-cols-4 sm:divide-x sm:divide-slate-100">
-        {[["Lines processed", s.descriptions_processed], ["Components written", s.approved_mappings], ["Not yet approved", s.pending_mappings], ["Unmatched lines", s.unmatched_descriptions]].map(([k, v]) => (
-          <div key={k as string} className="px-6 py-3"><div className="text-slate-500">{k}</div><div className="mt-0.5 text-lg font-semibold tabular-nums text-slate-900">{v ?? 0}</div></div>
+        {[["Lines processed", s.descriptions_processed], ["Components written", s.approved_mappings], ["Not yet approved", s.pending_mappings],
+          ["Skipped: no unit/qty", s.descriptions_skipped_unit_qty]].map(([k, v]) => (
+          <div key={k} className="px-6 py-3"><div className="text-slate-500">{k}</div><div className="mt-0.5 text-lg font-semibold tabular-nums text-slate-900">{v ?? 0}</div></div>
         ))}
       </div>
       <div className="border-t border-slate-100 px-6 py-4"><Downloads rec={rec} /></div>
@@ -52,11 +52,11 @@ function Latest({ rec }: { rec: ExportRecord }) {
 export default function ExportPage() {
   const { jobId, setJobId, refreshProgress } = useWork();
   const { notify, confirm } = useFeedback();
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [records, setRecords] = useState<ExportRecord[] | null>(null);
-  const [descs, setDescs] = useState<Description[]>([]);
+  const [jobs, setJobs] = useState([]);
+  const [records, setRecords] = useState(null);
+  const [descs, setDescs] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
 
   const load = () => api.exports().then(setRecords).catch((e) => setError(errorText(e)));
   useEffect(() => { load(); api.jobs().then(setJobs).catch((e) => setError(errorText(e))); }, []);
@@ -98,7 +98,8 @@ export default function ExportPage() {
           <button className="btn btn-primary" disabled={!jobId || busy || !approved} onClick={run}><FileOutput size={15} /> {busy ? "Exporting…" : "Export approved"}</button>
         </>} />
       <ErrorNote text={error} />
-      {jobId && <Guide id="export">Exporting writes every approved component under its BOQ line, with the Item No. and Cost Sheet Type from the Item Master.</Guide>}
+      {jobId && <Guide id="export">Exporting inserts every approved component directly below its BOQ line, highlighted yellow, with its description and
+        Item No. from the Item Master and its reviewed Cost Sheet Type. Everything else in the workbook stays as it was.</Guide>}
       {jobId && !approved && descs.length > 0 && (
         <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           Run #{jobId} has no approved components yet. <Link className="font-medium underline" to="/review">Review and approve</Link> them first.

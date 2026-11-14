@@ -220,6 +220,70 @@ def relocate_row(doc: SheetDoc, row: RawRow, new_number: int) -> RawRow:
     return RawRow(new_number, row.attrs, CELL_RE.sub(fix_cell, row.body))
 
 
+class StyleSheet:
+    """Append-only edits to styles.xml; existing fills, formats and dxfs never move."""
+
+    def __init__(self, pkg: XlsxPackage):
+        self.pkg = pkg
+        self.xml = pkg.text("xl/styles.xml")
+        self._fills: dict[str, int] = {}
+        self._filled: dict[tuple[str, str], str] = {}
+
+    def _append(self, list_tag: str, child_tag: str, item: str) -> int:
+        if list_tag == "dxfs" and "<dxfs" not in self.xml:
+            anchor = "</cellStyles>" if "</cellStyles>" in self.xml else "</cellXfs>"
+            self.xml = self.xml.replace(anchor, anchor + '<dxfs count="0"/>', 1)
+        m = re.search(rf"<{list_tag}\b([^>]*?)(?:/>|>(.*?)</{list_tag}>)", self.xml, re.S)
+        if m is None:
+            raise OoxmlError(f"styles.xml has no <{list_tag}>")
+        inner = m.group(2) or ""
+        index = len(re.findall(rf"<{child_tag}\b", inner))
+        attrs = re.sub(r'\s*count="\d+"', "", m.group(1)).rstrip("/")
+        new = f'<{list_tag} count="{index + 1}"{attrs}>{inner}{item}</{list_tag}>'
+        self.xml = self.xml[:m.start()] + new + self.xml[m.end():]
+        return index
+
+    def filled(self, style: str, rgb: str) -> str:
+        """Index of a copy of cell format `style` with a solid `rgb` fill."""
+        key = (style, rgb)
+        if key not in self._filled:
+            if rgb not in self._fills:
+                self._fills[rgb] = self._append(
+                    "fills", "fill", f'<fill><patternFill patternType="solid"><fgColor rgb="{rgb}"/>'
+                                     f'<bgColor indexed="64"/></patternFill></fill>')
+            xfs = re.search(r"<cellXfs\b[^>]*>(.*?)</cellXfs>", self.xml, re.S).group(1)
+            xf = re.findall(r"<xf\b[^>]*?(?:/>|>.*?</xf>)", xfs, re.S)[int(style)]
+            xf = re.sub(r'\s(?:fillId|applyFill)="[^"]*"', "", xf)
+            xf = xf.replace("<xf", f'<xf fillId="{self._fills[rgb]}" applyFill="1"', 1)
+            self._filled[key] = str(self._append("cellXfs", "xf", xf))
+        return self._filled[key]
+
+    def fill_dxf(self, rgb: str) -> int:
+        """A differential format (for conditional formatting) that only sets a fill."""
+        return self._append("dxfs", "dxf", f'<dxf><fill><patternFill patternType="solid">'
+                                           f'<fgColor rgb="{rgb}"/><bgColor rgb="{rgb}"/>'
+                                           f'</patternFill></fill></dxf>')
+
+    def flush(self) -> None:
+        self.pkg.set_text("xl/styles.xml", self.xml)
+
+
+CF_ANCHORS = ("<conditionalFormatting", "<dataValidations", "<hyperlinks", "<printOptions", "<pageMargins",
+              "<pageSetup", "<headerFooter", "<rowBreaks", "<colBreaks", "<customProperties",
+              "<cellWatches", "<ignoredErrors", "<smartTags", "<drawing", "<legacyDrawing",
+              "<picture", "<oleObjects", "<controls", "<webPublishItems", "<tableParts", "<extLst")
+
+
+def add_override_format(doc: SheetDoc, sqref: str, dxf_id: int) -> None:
+    """Put a rule over sqref that outranks every existing conditional format on those cells."""
+    tail = re.sub(r'(<(?:x14:)?cfRule\b[^>]*?\bpriority=")(\d+)',
+                  lambda m: f"{m.group(1)}{int(m.group(2)) + 1}", doc.tail)
+    rule = (f'<conditionalFormatting sqref="{sqref}"><cfRule type="expression" dxfId="{dxf_id}" '
+            f'priority="1" stopIfTrue="1"><formula>TRUE</formula></cfRule></conditionalFormatting>')
+    at = min((i for i in (tail.find(a) for a in CF_ANCHORS) if i >= 0), default=tail.index("</worksheet>"))
+    doc.tail = tail[:at] + rule + tail[at:]
+
+
 def cell_styles(row: RawRow) -> dict[str, str]:
     """Column letter -> style index for a row."""
     styles = {}

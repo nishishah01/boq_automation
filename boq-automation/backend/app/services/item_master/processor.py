@@ -1,5 +1,5 @@
 """Read the Item Master and build searchable component records."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pandas as pd
@@ -24,6 +24,13 @@ class Component:
     token_set: set[str] = field(default_factory=set)
     deprecated: bool = False
     install_like: bool = False
+    # Set when verified knowledge gives this record a different Cost Sheet Type than the master.
+    master_cost_sheet_type: str | None = None
+
+    @property
+    def original_cost_sheet_type(self) -> str:
+        """The Item Master's own classification, kept for traceability."""
+        return self.cost_sheet_type if self.master_cost_sheet_type is None else self.master_cost_sheet_type
 
     @property
     def class_name(self) -> str:
@@ -73,6 +80,11 @@ def enrich(c: Component) -> None:
     c.token_set = set(tokens(c.canon_brief))
     c.deprecated = is_deprecated(c.item_brief)
     c.install_like = looks_like_installation(c.item_brief)
+
+
+def reclassified(c: Component, cost_sheet_type: str) -> Component:
+    """A copy of c filed under another Cost Sheet Type; the master's value is remembered."""
+    return replace(c, cost_sheet_type=cost_sheet_type, master_cost_sheet_type=c.original_cost_sheet_type)
 
 
 def read_item_master(path: str | Path, sheet: str | None = None) -> list[Component]:

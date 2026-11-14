@@ -8,19 +8,19 @@ import {
   COST_SHEET_TIP, Disclosure, Drawer, Empty, engineName, ErrorNote, Guide, InfoTip, MetricStrip, Modal, PageHeader, Progress,
   Spinner, Status,
 } from "../components/ui";
-import { inScope, live, lineStatus } from "../utils/status";
-import type { BoqUpload, Description, ItemMasterUpload, Job } from "../types";
+import { inScope, live, lineStatus, missingUnitQty } from "../utils/status";
 
-function RunSettings({ onStarted, onCancel }: { onStarted: (j: Job) => void; onCancel?: () => void }) {
+function RunSettings({ onStarted, onCancel }) {
   const { options, boqId, masterId } = useWork();
-  const [boq, setBoq] = useState<BoqUpload | null>(null);
-  const [master, setMaster] = useState<ItemMasterUpload | null>(null);
-  const [types, setTypes] = useState<string[]>([]);
+  const [boq, setBoq] = useState(null);
+  const [master, setMaster] = useState(null);
+  const [types, setTypes] = useState([]);
   const [threshold, setThreshold] = useState(75);
   const [maxCandidates, setMaxCandidates] = useState(5);
   const [inferred, setInferred] = useState(true);
   const [manualLow, setManualLow] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [zeroQty, setZeroQty] = useState("review");
+  const [error, setError] = useState(null);
   const [starting, setStarting] = useState(false);
 
   useEffect(() => {
@@ -43,8 +43,8 @@ function RunSettings({ onStarted, onCancel }: { onStarted: (j: Job) => void; onC
     setStarting(true); setError(null);
     try {
       onStarted(await api.createJob({
-        boq_upload_id: boq!.id, item_master_upload_id: master!.id, cost_sheet_types: types,
-        confidence_threshold: threshold, max_candidates: maxCandidates, suggest_inferred: inferred, manual_low_confidence: manualLow,
+        boq_upload_id: boq.id, item_master_upload_id: master.id, cost_sheet_types: types,
+        confidence_threshold: threshold, max_candidates: maxCandidates, suggest_inferred: inferred, manual_low_confidence: manualLow, zero_quantity: zeroQty,
       }));
     } catch (e) { setError(errorText(e)); } finally { setStarting(false); }
   }
@@ -76,6 +76,11 @@ function RunSettings({ onStarted, onCancel }: { onStarted: (j: Job) => void; onC
             <input type="range" min={0} max={100} className="w-full accent-brand-600" value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} /></label>
           <label className="text-sm"><span className="label">Alternatives kept per item</span>
             <input type="number" min={1} max={20} className="input" value={maxCandidates} onChange={(e) => setMaxCandidates(Number(e.target.value))} /></label>
+          <label className="text-sm sm:col-span-2"><span className="label flex items-center gap-1">Items with quantity 0 <InfoTip text="Items need both a unit and a quantity to be mapped. A quantity of 0 is never treated as a valid quantity silently." /></span>
+            <select className="input" value={zeroQty} onChange={(e) => setZeroQty(e.target.value)}>
+              <option value="review">Map them, and mark every suggestion for review</option>
+              <option value="skip">Skip them, like a missing quantity</option>
+            </select></label>
           <label className="flex items-center gap-2.5 text-sm text-slate-700"><input type="checkbox" className="accent-brand-600" checked={inferred} onChange={(e) => setInferred(e.target.checked)} /> Suggest inferred components</label>
           <label className="flex items-center gap-2.5 text-sm text-slate-700"><input type="checkbox" className="accent-brand-600" checked={manualLow} onChange={(e) => setManualLow(e.target.checked)} /> Low confidence needs individual approval</label>
         </div>
@@ -91,13 +96,25 @@ function RunSettings({ onStarted, onCancel }: { onStarted: (j: Job) => void; onC
   );
 }
 
-function LineDrawer({ d, onClose }: { d: Description; onClose: () => void }) {
+function LineDrawer({ d, onClose }) {
   const navigate = useNavigate();
   const ms = live(d);
   return (
     <Drawer title={d.description} subtitle={`Row ${d.row_number} · ${d.cost_sheet_type}`} onClose={onClose}
-      footer={<button className="btn btn-primary" onClick={() => navigate(`/review?line=${d.id}`)}>Review this line <ArrowRight size={15} /></button>}>
+      footer={missingUnitQty(d) ? undefined : <button className="btn btn-primary" onClick={() => navigate(`/review?line=${d.id}`)}>Review this line <ArrowRight size={15} /></button>}>
       {d.context.length > 0 && <p className="mb-5 text-sm text-slate-500">Under: {d.context[0]}</p>}
+      {d.flagged && d.flag_note && (
+        <div className="mb-5 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />{d.flag_note}
+        </div>
+      )}
+      {missingUnitQty(d) && (
+        <div className="mb-5 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <div className="font-medium text-slate-900">Not mapped</div>
+          <div className="mt-0.5">{d.skip_reason.replace(/^Skipped – Unit\/Quantity Missing: /, "This BOQ item was skipped because its ")}.</div>
+          <div className="mt-1.5 text-xs text-slate-500">Unit: {d.uom || "blank"} · Quantity: {d.quantity || "blank or 0"}. Components are only added to items with both; nothing was assumed.</div>
+        </div>
+      )}
       <div className="eyebrow mb-2">Components found</div>
       {ms.length === 0 ? <p className="text-sm text-slate-500">No Item Master component was found for this line.</p> : (
         <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200">
@@ -130,12 +147,12 @@ export default function MappingPage() {
   const { jobId, setJobId, refreshProgress } = useWork();
   const { notify } = useFeedback();
   const navigate = useNavigate();
-  const [jobs, setJobs] = useState<Job[] | null>(null);
-  const [job, setJob] = useState<Job | null>(null);
-  const [descs, setDescs] = useState<Description[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [jobs, setJobs] = useState(null);
+  const [job, setJob] = useState(null);
+  const [descs, setDescs] = useState([]);
+  const [error, setError] = useState(null);
   const [configuring, setConfiguring] = useState(false);
-  const [open, setOpen] = useState<Description | null>(null);
+  const [open, setOpen] = useState(null);
   const [showAll, setShowAll] = useState(false);
 
   useEffect(() => { api.jobs().then(setJobs).catch((e) => setError(errorText(e))); }, [jobId]);
@@ -143,7 +160,7 @@ export default function MappingPage() {
   const poll = useCallback(() => {
     if (!jobId) return () => undefined;
     let live = true;
-    let timer: ReturnType<typeof setTimeout>;
+    let timer;
     const tick = async () => {
       try {
         const j = await api.job(jobId);
@@ -151,7 +168,7 @@ export default function MappingPage() {
         setJob(j);
         setDescs(await api.descriptions(jobId));
         if (j.status === "queued" || j.status === "running") timer = setTimeout(tick, 1200);
-        else refreshProgress();
+        else { refreshProgress(); api.jobs().then((l) => { if (live) setJobs(l); }).catch(() => undefined); }
       } catch (e) { if (live) setError(errorText(e)); }
     };
     tick();
@@ -165,14 +182,17 @@ export default function MappingPage() {
     return {
       mapped: s.filter((x) => x === "matched" || x === "approved").length,
       review: s.filter((x) => x === "review").length,
+      scope: s.filter((x) => x === "scope_review").length,
       unmatched: s.filter((x) => x === "unmatched").length,
     };
   }, [scoped]);
 
-  const started = (j: Job) => { setConfiguring(false); setJob(j); setDescs([]); setJobId(j.id); notify(`Run #${j.id} started.`); };
+  const started = (j) => { setConfiguring(false); setJob(j); setDescs([]); setJobId(j.id); notify(`Run #${j.id} started.`); };
   const running = job?.status === "queued" || job?.status === "running";
-  const rows = showAll ? descs : scoped;
-  const hidden = descs.length - scoped.length;
+  const incomplete = useMemo(() => descs.filter(missingUnitQty), [descs]);
+  const listed = useMemo(() => descs.filter((d) => inScope(d) || missingUnitQty(d)), [descs]);
+  const rows = showAll ? descs : listed;
+  const hidden = descs.length - listed.length;
 
   if (jobs === null || (jobId && !job && !error)) return <Spinner />;
   if (!jobId || !job) {
@@ -185,7 +205,8 @@ export default function MappingPage() {
   return (
     <>
       <PageHeader eyebrow="Step 2" title="Run mapping"
-        subtitle={<>Run #{job.id} · {engineName(job.mode)} · {job.config.cost_sheet_types.join(", ")}</>}
+        subtitle={<>Run #{job.id} · {engineName(job.mode)} · {job.config.cost_sheet_types.join(", ")}
+          {job.summary?.knowledge ? ` · ${job.summary.knowledge.historical_descriptions} verified descriptions in the knowledge base` : ""}</>}
         action={<>
           <select className="input !w-auto text-[13px]" aria-label="Processing run" value={jobId} onChange={(e) => setJobId(Number(e.target.value))}>
             {jobs.map((j) => <option key={j.id} value={j.id}>Run #{j.id}{j.status !== "completed" ? ` (${j.status})` : ""}</option>)}
@@ -207,9 +228,13 @@ export default function MappingPage() {
         </div>
       ) : (
         <MetricStrip items={[
-          { label: "BOQ descriptions", value: scoped.length, hint: "Lines in the selected Cost Sheet Types that needed components" },
+          { label: "Identified", value: descs.length, hint: "BOQ items found in the worksheet" },
+          { label: "Processed", value: scoped.length, hint: "Items with both a unit and a quantity, in the selected Cost Sheet Types" },
+          { label: "Skipped: no unit/qty", value: incomplete.length, hint: "Items whose own unit or quantity is blank or not valid. They are never given components." },
           { label: "Mapped", value: counts.mapped, tone: "good" },
           { label: "Review required", value: counts.review, tone: counts.review ? "warn" : undefined },
+          { label: "Outside Highside scope", value: counts.scope, tone: counts.scope ? "warn" : undefined,
+            hint: "Lines that look like Lowside or other work. Nothing is added to them automatically; review them manually." },
           { label: "Unmatched", value: counts.unmatched, tone: counts.unmatched ? "bad" : undefined },
         ]} />
       )}

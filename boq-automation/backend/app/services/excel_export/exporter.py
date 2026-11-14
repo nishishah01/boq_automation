@@ -3,21 +3,26 @@
 Child-row conventions, all taken from the mapped rows of the real Sales BOM:
   A  parent Unique No + running number     B  parent Unique No
   D  Item Brief exactly as in the master   E  the parent's Description, verbatim
-  G  N                                     H  the component's own master Cost Sheet Type
+  G  N                                     H  the component's reviewed Cost Sheet Type
   I  parent Billable Qty                   J, K  0
   L, Q, R, S, T  the sheet's row formulas  M  parent Qty UOM (not the master UOM)
   N  master Cost                           O  0
   U  Component / Installation              V  Item No.
+Every inserted row is filled yellow, overriding the template's own conditional formats on it.
 """
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from openpyxl.utils import column_index_from_string, get_column_letter
+
 from app.services.boq_parser.parser import ParsedBoq, SalesLine, parse_boq
 from app.services.excel_processor.ooxml import (
-    Formula, OoxmlError, RawRow, SharedStrings, SheetDoc, XlsxPackage, assert_same_row_formulas,
-    cell_styles, relocate_row, render_row_body,
+    Formula, OoxmlError, RawRow, SharedStrings, SheetDoc, StyleSheet, XlsxPackage, add_override_format,
+    assert_same_row_formulas, cell_styles, relocate_row, render_row_body,
 )
+
+INSERTED_FILL = "FFFFFF00"  # yellow
 
 
 @dataclass
@@ -67,14 +72,19 @@ def _child_style_row(doc: SheetDoc, parsed: ParsedBoq) -> RawRow:
 
 def insert_rows(pkg: XlsxPackage, sheet: str, parsed: ParsedBoq,
                 inserts: dict[int, list[tuple[dict[str, object], RawRow | None]]],
-                sst: SharedStrings, styles: dict[str, str]) -> dict[int, int]:
-    """Insert rendered rows after given source rows. Returns source row -> output row."""
+                sst: SharedStrings, styles: dict[str, str],
+                highlight: tuple[str, int] | None = None) -> dict[int, int]:
+    """Insert rendered rows after given source rows. Returns source row -> output row.
+
+    highlight = (last column, dxf id): inserted rows get a conditional-format rule over
+    A..last column that outranks the sheet's own rules."""
     part = pkg.sheet_part(sheet)
     doc = SheetDoc.parse(pkg.text(part))
     assert_same_row_formulas(doc)
     source_rows = doc.row_map()
     new_rows: list[RawRow] = []
     mapping: dict[int, int] = {}
+    added: list[int] = []
     shift = 0
     for row in doc.rows:
         target = row.number + shift
@@ -83,6 +93,7 @@ def insert_rows(pkg: XlsxPackage, sheet: str, parsed: ParsedBoq,
         for values, attrs_from in inserts.get(row.number, []):
             shift += 1
             n = row.number + shift
+            added.append(n)
             attrs = (attrs_from or source_rows[row.number]).attrs
             new_rows.append(RawRow(n, attrs, render_row_body(values(n) if callable(values) else values,
                                                              n, styles, sst)))
@@ -90,8 +101,22 @@ def insert_rows(pkg: XlsxPackage, sheet: str, parsed: ParsedBoq,
     doc.shared = {}
     if shift:
         _fix_ranges(doc, pkg, sheet, mapping)
+    if highlight and added:
+        last_col, dxf_id = highlight
+        add_override_format(doc, " ".join(f"A{a}:{last_col}{b}" for a, b in _runs(added)), dxf_id)
     pkg.set_text(part, doc.serialize())
     return mapping
+
+
+def _runs(numbers: list[int]) -> list[tuple[int, int]]:
+    """Sorted row numbers -> (first, last) of each consecutive run."""
+    runs: list[tuple[int, int]] = []
+    for n in sorted(numbers):
+        if runs and n == runs[-1][1] + 1:
+            runs[-1] = (runs[-1][0], n)
+        else:
+            runs.append((n, n))
+    return runs
 
 
 def _shift(row: int, mapping: dict[int, int]) -> int:
@@ -120,16 +145,27 @@ def _fix_ranges(doc: SheetDoc, pkg: XlsxPackage, sheet: str, mapping: dict[int, 
         rf"(_FilterDatabase\"[^>]*>{quoted})\$([A-Z]+)\$(\d+):\$([A-Z]+)\$(\d+)", bump_name, wb))
 
 
-def export_boq(source: str | Path, sheet: str, plans: list[ChildPlan], destination: str | Path) -> dict:
+def export_boq(source: str | Path, sheet: str, plans: list[ChildPlan], destination: str | Path,
+               layout: dict | None = None) -> dict:
     """Write destination; source is never touched. Returns what is needed for verification."""
-    parsed = parse_boq(source, sheet)
+    parsed = parse_boq(source, sheet, layout)
+    if parsed.layout and parsed.layout.get("format") == "generic":
+        from app.services.excel_export.generic import export_generic
+        return export_generic(source, sheet, plans, destination, parsed.layout)
     lines = {l.row.row: l for l in parsed.lines}
     pkg = XlsxPackage(source)
     part = pkg.sheet_part(sheet)
     doc = SheetDoc.parse(pkg.text(part))
     exemplar = _child_style_row(doc, parsed)
-    styles = cell_styles(exemplar)
     sst = SharedStrings(pkg)
+
+    # Fill every column of an inserted row, A through the last one the exemplar or the values use.
+    base = cell_styles(exemplar)
+    last = max([column_index_from_string(c) for c in base] + [column_index_from_string("V")])
+    stylesheet = StyleSheet(pkg)
+    styles = {get_column_letter(i): stylesheet.filled(base.get(get_column_letter(i), "0"), INSERTED_FILL)
+              for i in range(1, last + 1)}
+    highlight = (get_column_letter(last), stylesheet.fill_dxf(INSERTED_FILL))
 
     by_parent: dict[int, list[ChildPlan]] = {}
     for p in plans:
@@ -152,10 +188,13 @@ def export_boq(source: str | Path, sheet: str, plans: list[ChildPlan], destinati
                              "class_name": plan.class_name, "description": line.row.description,
                              "uom": line.row.uom, "qty": line.row.billable_qty})
 
-    mapping = insert_rows(pkg, sheet, parsed, inserts, sst, styles)
+    mapping = insert_rows(pkg, sheet, parsed, inserts, sst, styles, highlight)
     sst.flush()
+    stylesheet.flush()
     pkg.drop_calc_chain()
     pkg.force_full_recalc()
     pkg.save(destination)
     return {"expected": expected, "row_mapping": mapping, "sheet_part": part,
-            "source_rows": len(parsed.rows)}
+            "source_rows": len(parsed.rows), "fill_columns": last,
+            "blocks": [{"parent_row": pr, "block_end": lines[pr].last_row, "count": len(g)} for pr, g in by_parent.items()],
+            "line_rows": sorted(lines)}

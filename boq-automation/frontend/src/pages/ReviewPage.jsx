@@ -1,36 +1,65 @@
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  AlertTriangle, ArrowRight, Check, ChevronRight, ClipboardCheck, Eye, Flag, Pencil, Plus, RefreshCw, Replace, Search, ThumbsDown,
-  Trash2,
+  AlertTriangle, ArrowRight, BookOpenCheck, Check, ChevronRight, ClipboardCheck, Eye, Flag, Pencil, Plus, RefreshCw, Replace,
+  Search, Tag, ThumbsDown, Trash2,
 } from "lucide-react";
 import { api, errorText } from "../services/api";
 import { useWork } from "../context/WorkContext";
 import { useFeedback } from "../components/feedback";
 import {
-  Confidence, COST_SHEET_TIP, Drawer, Empty, engineName, ErrorNote, Guide, InfoTip, Menu, Modal, PageHeader, Progress,
-  Segmented, Spinner, Status,
+  ClassSource, Confidence, COST_SHEET_TIP, Drawer, Empty, engineName, ErrorNote, Guide, InfoTip, Menu, Modal, PageHeader,
+  Progress, Segmented, Spinner, Status,
 } from "../components/ui";
-import { approvalText, componentStatus, inScope, lineStatus, live } from "../utils/status";
-import type { Candidate, Description, Job, Mapping, SearchItem } from "../types";
+import { approvalText, componentStatus, inScope, lineStatus, live, missingUnitQty } from "../utils/status";
 
-type View = "all" | "attention" | "approved" | "unmatched";
-
-const EXTRA_FILTERS: { key: string; label: string; test: (d: Description, threshold: number) => boolean }[] = [
+const EXTRA_FILTERS = [
   { key: "supply", label: "Highside Supply items", test: (d) => live(d).some((m) => m.cost_sheet_type === "Highside Supply") },
   { key: "install", label: "Highside Installation items", test: (d) => live(d).some((m) => m.cost_sheet_type === "Highside Installation") },
   { key: "low", label: "Low confidence", test: (d, t) => live(d).some((m) => m.confidence < t) },
   { key: "inferred", label: "Inferred components", test: (d) => live(d).some((m) => m.selection_type === "Inferred") },
   { key: "flagged", label: "Flagged lines", test: (d) => d.flagged },
+  { key: "history", label: "Backed by verified BOQs", test: (d) => live(d).some((m) => (m.evidence ?? []).length > 0) },
+  { key: "reclassified", label: "Reclassified vs Item Master",
+    test: (d) => live(d).some((m) => m.master_cost_sheet_type && m.master_cost_sheet_type !== m.cost_sheet_type) },
+  { key: "scope", label: "Possibly outside Highside scope", test: (d) => d.status === "scope_review" },
 ];
+
+/* ---------- historical evidence ---------- */
+
+function Evidence({ items, empty }) {
+  if (!items?.length) return <p className="text-sm text-slate-500">{empty}</p>;
+  return (
+    <ul className="space-y-2">
+      {items.map((e, i) => (
+        <li key={i} className="rounded-lg border border-slate-200 px-3 py-2.5">
+          <div className="flex justify-between gap-3 text-sm">
+            <span className="text-slate-900">{e.description}</span>
+            <span className="shrink-0 tabular-nums text-slate-500" title="Similarity to this BOQ line">{Math.round((e.similarity ?? 0) * 100)}%</span>
+          </div>
+          <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-slate-400">
+            <span>{e.source === "historical" ? `Verified BOQ: ${e.file}` : e.file}{e.row ? ` · row ${e.row}` : ""}</span>
+            {e.cost_sheet_type && <span>· used as {e.cost_sheet_type}</span>}
+            {e.agrees_on?.length > 0 && <span>· {e.agrees_on.join(", ")}</span>}
+          </div>
+          {e.components && (
+            <ul className="mt-1.5 space-y-0.5">{e.components.map((c) => (
+              <li key={c.item_no} className="text-xs text-slate-600"><span className="font-mono">{c.item_no}</span> {c.item_brief} · {c.cost_sheet_type}</li>
+            ))}</ul>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /* ---------- details ---------- */
 
-function specs(d: Description): [string, string][] {
-  const r = d.requirements as Record<string, unknown>;
-  const list = (k: string) => ((r[k] as unknown[]) ?? []).join(", ");
-  const cap = Object.entries((r.capacity ?? {}) as Record<string, number>).map(([k, v]) => `${v} ${k.toUpperCase()}`).join(", ");
-  const rows: [string, string][] = [
+function specs(d) {
+  const r = d.requirements;
+  const list = (k) => ((r[k]) ?? []).join(", ");
+  const cap = Object.entries((r.capacity ?? {})).map(([k, v]) => `${v} ${k.toUpperCase()}`).join(", ");
+  const rows = [
     ["Component", String(r.component ?? "")], ["Model", list("models")], ["Make", list("brands")], ["Capacity", cap],
     ["Size (mm)", list("sizes_mm")], ["Material", list("materials")], ["Equipment type", list("equipment_form").replace(/_/g, " ").toLowerCase()],
     ["Indoor / outdoor", list("unit_side")], ["Refrigerant", list("refrigerant")], ["Activities", list("activities")],
@@ -40,7 +69,7 @@ function specs(d: Description): [string, string][] {
   return rows.filter(([, v]) => v && v !== "undefined");
 }
 
-function Specs({ d }: { d: Description }) {
+function Specs({ d }) {
   return (
     <dl className="grid grid-cols-1 gap-x-6 gap-y-2.5 text-sm sm:grid-cols-2">
       {specs(d).map(([k, v]) => (
@@ -50,11 +79,11 @@ function Specs({ d }: { d: Description }) {
   );
 }
 
-function Block({ title, children }: { title: string; children: ReactNode }) {
+function Block({ title, children }) {
   return <section className="border-t border-slate-100 pt-5"><div className="eyebrow mb-3">{title}</div>{children}</section>;
 }
 
-function Candidates({ d, highlight }: { d: Description; highlight?: string }) {
+function Candidates({ d, highlight }) {
   if (!d.candidates.length) return <p className="text-sm text-slate-500">No alternatives were recorded for this line.</p>;
   const chosen = new Set(live(d).map((m) => m.item_no));
   return (
@@ -67,7 +96,8 @@ function Candidates({ d, highlight }: { d: Description; highlight?: string }) {
             return (
               <tr key={`${c.item_no}-${i}`} className={c.item_no === highlight ? "bg-brand-50/50" : ""}>
                 <td className="px-3 py-2 align-top">
-                  <div className="font-medium text-slate-900">{c.item_brief}{c.exact_model && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">Exact model</span>}</div>
+                  <div className="font-medium text-slate-900">{c.item_brief}{c.exact_model && <span className="ml-1.5 rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">Exact model</span>}
+                    {c.historical_uses > 0 && <span className="ml-1.5 rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-700">Used {c.historical_uses}× before</span>}</div>
                   <div className="mt-0.5 text-slate-500">{why.join(" · ")}</div>
                 </td>
                 <td className="w-24 px-3 py-2 align-top font-mono text-xs text-slate-500">{c.item_no}</td>
@@ -81,7 +111,7 @@ function Candidates({ d, highlight }: { d: Description; highlight?: string }) {
   );
 }
 
-function ComponentDetails({ d, m, threshold, onClose }: { d: Description; m: Mapping; threshold: number; onClose: () => void }) {
+function ComponentDetails({ d, m, threshold, onClose }) {
   const cand = d.candidates.find((c) => c.item_no === m.item_no);
   const matched = cand?.reasons.length ? cand.reasons : m.reason ? [m.reason] : [];
   const concerns = [...m.flags, ...(cand?.warnings ?? [])].filter((x, i, a) => a.indexOf(x) === i);
@@ -96,10 +126,22 @@ function ComponentDetails({ d, m, threshold, onClose }: { d: Description; m: Map
         <div className="grid gap-4 sm:grid-cols-3">
           <div><div className="eyebrow mb-1.5">Confidence</div><Confidence value={m.confidence} threshold={threshold} /></div>
           <div><div className="eyebrow mb-1.5">Selected by</div><div className="text-sm text-slate-900">{engineName(m.source)} · {m.selection_type}</div></div>
-          <div><div className="eyebrow mb-1.5 flex items-center gap-1">Cost Sheet Type <InfoTip text={COST_SHEET_TIP} /></div><div className="text-sm text-slate-900">{m.cost_sheet_type}</div></div>
+          <div><div className="eyebrow mb-1.5 flex items-center gap-1">Cost Sheet Type <InfoTip text={COST_SHEET_TIP} /></div>
+            <div className="text-sm text-slate-900">{m.cost_sheet_type}</div><div className="mt-1"><ClassSource m={m} showMaster={false} /></div></div>
         </div>
+        <Block title="Classification">
+          <dl className="grid gap-3 text-sm sm:grid-cols-3">
+            <div><dt className="text-slate-500">Item Master</dt><dd className="text-slate-900">{m.master_cost_sheet_type || "–"}</dd></div>
+            <div><dt className="text-slate-500">Engine recommended</dt><dd className="text-slate-900">{m.ai_cost_sheet_type || m.cost_sheet_type}</dd></div>
+            <div><dt className="text-slate-500">Exported as</dt><dd className="font-medium text-slate-900">{m.cost_sheet_type}</dd></div>
+          </dl>
+          {m.classification_note && <p className="mt-2 text-sm text-slate-600">{m.classification_note}</p>}
+        </Block>
         <Block title="Why this component">
           <p className="text-sm text-slate-700">{m.reason || "No reason recorded."}</p>
+        </Block>
+        <Block title="Verified examples supporting it">
+          <Evidence items={m.evidence} empty="No verified BOQ or approved review used this component for a similar description." />
         </Block>
         <div className="grid gap-5 sm:grid-cols-2">
           <Block title="Matched">
@@ -118,7 +160,7 @@ function ComponentDetails({ d, m, threshold, onClose }: { d: Description; m: Map
   );
 }
 
-function LineDetails({ d, onClose }: { d: Description; onClose: () => void }) {
+function LineDetails({ d, onClose }) {
   return (
     <Modal title={d.description} subtitle={`Row ${d.row_number} · ${d.unique_no}${d.context[0] ? ` · under ${d.context[0]}` : ""}`} size="lg" onClose={onClose}>
       <div className="space-y-5">
@@ -128,23 +170,47 @@ function LineDetails({ d, onClose }: { d: Description; onClose: () => void }) {
             <ul className="space-y-2">{[...d.unmatched, ...d.notes].map((n, i) => <li key={i} className="flex gap-2 text-sm text-amber-800"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{n}</li>)}</ul>
           </Block>
         )}
+        <Block title="Similar verified descriptions">
+          <Evidence items={d.requirements.historical_examples} empty="No similar, technically compatible description in the knowledge base yet." />
+        </Block>
         <Block title="Candidates considered"><Candidates d={d} /></Block>
       </div>
     </Modal>
   );
 }
 
+function Reclassify({ m, types, onSave, onClose }) {
+  const [value, setValue] = useState(m.cost_sheet_type);
+  const [note, setNote] = useState("");
+  return (
+    <Modal title="Change Cost Sheet Type" subtitle={<span><span className="font-mono">{m.item_no}</span> · {m.item_brief}</span>} onClose={onClose}
+      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => onSave(value, note)}>Save and approve</button></>}>
+      <div className="mb-4 rounded-lg bg-slate-50 px-4 py-3 text-sm">
+        <div className="flex justify-between gap-3"><span className="text-slate-500">Item Master</span><span className="text-slate-900">{m.master_cost_sheet_type || "–"}</span></div>
+        <div className="mt-1 flex justify-between gap-3"><span className="text-slate-500">Recommended</span><span className="text-slate-900">{m.ai_cost_sheet_type || m.cost_sheet_type}</span></div>
+      </div>
+      <fieldset className="mb-4 space-y-2">
+        <legend className="label">Export this component as</legend>
+        {types.map((t) => (
+          <label key={t} className="flex items-center gap-2.5 text-sm text-slate-800">
+            <input type="radio" name="cst" className="accent-brand-600" checked={value === t} onChange={() => setValue(t)} /> {t}
+          </label>
+        ))}
+      </fieldset>
+      <label className="block"><span className="label">Reason (optional)</span><input className="input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. used as highside in our projects" /></label>
+      <p className="mt-3 text-xs text-slate-500">The correction is approved, written on export, and remembered for similar lines in future runs. The Item Master itself is not changed.</p>
+    </Modal>
+  );
+}
+
 /* ---------- add / replace ---------- */
 
-function Picker({ masterId, types, d, replacing, onDone, onClose }: {
-  masterId: number; types: string[]; d: Description; replacing: Mapping | null;
-  onDone: (item: SearchItem) => Promise<void>; onClose: () => void;
-}) {
+function Picker({ masterId, types, d, replacing, onDone, onClose }) {
   const [q, setQ] = useState("");
-  const [items, setItems] = useState<SearchItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pick, setPick] = useState<SearchItem | null>(null);
-  const [pickRaw, setPickRaw] = useState<Record<string, string> | null>(null);
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+  const [pick, setPick] = useState(null);
+  const [pickRaw, setPickRaw] = useState(null);
   const [saving, setSaving] = useState(false);
   const taken = new Set(live(d).map((m) => m.item_no));
   const suggestions = d.candidates.filter((c) => c.decision !== "rejected" && !taken.has(c.item_no));
@@ -162,9 +228,9 @@ function Picker({ masterId, types, d, replacing, onDone, onClose }: {
     if (pick) api.itemDetail(masterId, pick.item_no).then((r) => setPickRaw(r.raw)).catch(() => setPickRaw({}));
   }, [pick, masterId]);
 
-  const fromCandidate = (c: Candidate): SearchItem =>
+  const fromCandidate = (c) =>
     ({ item_no: c.item_no, item_brief: c.item_brief, cost_sheet_type: c.cost_sheet_type, uom: "", cost: 0, family: "" });
-  const list: SearchItem[] = items ?? suggestions.map(fromCandidate);
+  const list = items ?? suggestions.map(fromCandidate);
 
   async function confirm() {
     if (!pick) return;
@@ -172,8 +238,8 @@ function Picker({ masterId, types, d, replacing, onDone, onClose }: {
     try { await onDone(pick); } catch (e) { setError(errorText(e)); setSaving(false); }
   }
 
-  const facts = (raw: Record<string, string> | null) =>
-    ["Family", "Make", "Model", "Size", "QuantityUom", "Description"].map((k) => [k === "QuantityUom" ? "UOM" : k, raw?.[k] ?? ""] as [string, string]).filter(([, v]) => v);
+  const facts = (raw) =>
+    ["Family", "Make", "Model", "Size", "QuantityUom", "Description"].map((k) => [k === "QuantityUom" ? "UOM" : k, raw?.[k] ?? ""]).filter(([, v]) => v);
 
   return (
     <Drawer title={replacing ? "Replace component" : "Add component"} subtitle={d.description} onClose={onClose}
@@ -232,7 +298,7 @@ function Picker({ masterId, types, d, replacing, onDone, onClose }: {
   );
 }
 
-function EditSpecs({ d, onSave, onClose }: { d: Description; onSave: (spec: string, note: string) => void; onClose: () => void }) {
+function EditSpecs({ d, onSave, onClose }) {
   const [spec, setSpec] = useState(String(d.requirements.specification ?? ""));
   const [note, setNote] = useState(String(d.requirements.engineer_note ?? ""));
   return (
@@ -246,11 +312,7 @@ function EditSpecs({ d, onSave, onClose }: { d: Description; onSave: (spec: stri
 
 /* ---------- one BOQ line ---------- */
 
-function LineSection({ d, open, onToggle, act, onDetails, onLine, onPick, onEdit }: {
-  d: Description; open: boolean; onToggle: () => void;
-  act: (fn: () => Promise<unknown>, done: string) => void; onDetails: (m: Mapping) => void; onLine: () => void;
-  onPick: (replacing: Mapping | null) => void; onEdit: () => void;
-}) {
+function LineSection({ d, open, onToggle, act, onDetails, onLine, onPick, onEdit, onReclass }) {
   const { confirm } = useFeedback();
   const ms = live(d);
   const rejected = d.mappings.filter((m) => m.status === "incorrect");
@@ -263,7 +325,7 @@ function LineSection({ d, open, onToggle, act, onDetails, onLine, onPick, onEdit
         <ChevronRight size={17} className={`shrink-0 text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-medium text-slate-900" title={d.description}>{d.description}</div>
-          <div className="truncate text-xs text-slate-400">{d.context[0] ? `${d.context[0]}` : `Row ${d.row_number}`}</div>
+          <div className="truncate text-xs text-slate-400">Row {d.row_number}{d.uom ? ` · ${d.quantity} ${d.uom}` : ""}{d.context[0] ? ` · ${d.context[0]}` : ""}</div>
         </div>
         <div className="hidden w-28 text-right text-[13px] text-slate-500 sm:block">{ms.length} component{ms.length === 1 ? "" : "s"}</div>
         <div className="hidden w-32 text-right text-[13px] text-slate-500 md:block">{approvalText(d)}</div>
@@ -272,18 +334,25 @@ function LineSection({ d, open, onToggle, act, onDetails, onLine, onPick, onEdit
 
       {open && (
         <div className="border-t border-slate-100 bg-slate-50/40 px-5 pb-4 pt-3 animate-fade-in">
+          {d.flagged && d.flag_note && (
+            <div className="mb-3 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0" />{d.flag_note}
+            </div>
+          )}
           {attention > 0 && (
             <button onClick={onLine} className="mb-3 flex items-center gap-2 text-[13px] text-amber-800 hover:underline">
               <AlertTriangle size={14} /> {attention} note{attention > 1 ? "s" : ""} need{attention > 1 ? "" : "s"} attention
             </button>
           )}
           {ms.length === 0 ? (
-            <p className="py-3 text-sm text-slate-500">No component selected. Add one from the Item Master, or regenerate after correcting the specification.</p>
+            <p className="py-3 text-sm text-slate-500">{d.status === "scope_review"
+              ? "Nothing was added automatically. If this line is Highside work after all, add its components from the Item Master."
+              : "No component selected. Add one from the Item Master, or regenerate after correcting the specification."}</p>
           ) : (
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
               <table className="w-full">
                 <thead className="table-head border-b border-slate-100"><tr>
-                  <th>Item brief</th><th className="hidden sm:table-cell">Item No.</th>
+                  <th>Component to insert below this line</th><th className="hidden sm:table-cell">Item No.</th>
                   <th className="hidden md:table-cell"><span className="inline-flex items-center gap-1">Cost Sheet Type <InfoTip text={COST_SHEET_TIP} /></span></th>
                   <th>Status</th><th className="!text-right">Actions</th>
                 </tr></thead>
@@ -292,10 +361,14 @@ function LineSection({ d, open, onToggle, act, onDetails, onLine, onPick, onEdit
                     <tr key={m.id} className="table-row">
                       <td>
                         <button className="text-left font-medium text-slate-900 hover:text-brand-700" onClick={() => onDetails(m)}>{m.item_brief}</button>
-                        <div className="text-xs text-slate-500 sm:hidden"><span className="font-mono">{m.item_no}</span> · {m.cost_sheet_type}</div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+                          <span className="sm:hidden"><span className="font-mono">{m.item_no}</span> · {m.cost_sheet_type}</span>
+                          <span>{m.confidence}% · {engineName(m.source)}</span>
+                          {(m.evidence ?? []).length > 0 && <span className="inline-flex items-center gap-1 text-sky-700"><BookOpenCheck size={12} /> {m.evidence.length} verified example{m.evidence.length > 1 ? "s" : ""}</span>}
+                        </div>
                       </td>
                       <td className="hidden whitespace-nowrap font-mono text-xs text-slate-500 sm:table-cell">{m.item_no}</td>
-                      <td className="hidden whitespace-nowrap text-slate-600 md:table-cell">{m.cost_sheet_type}</td>
+                      <td className="hidden md:table-cell"><div className="whitespace-nowrap text-slate-700">{m.cost_sheet_type}</div><ClassSource m={m} /></td>
                       <td><Status status={componentStatus(m)} /></td>
                       <td>
                         <div className="flex items-center justify-end gap-1">
@@ -305,6 +378,7 @@ function LineSection({ d, open, onToggle, act, onDetails, onLine, onPick, onEdit
                           <button className="btn btn-ghost btn-sm" onClick={() => onPick(m)}><Replace size={14} /> Replace</button>
                           <Menu items={[
                             { label: "View details", icon: <Eye size={15} />, onClick: () => onDetails(m) },
+                            { label: "Change Cost Sheet Type", icon: <Tag size={15} />, onClick: () => onReclass(m) },
                             { label: "Mark as incorrect", icon: <ThumbsDown size={15} />, onClick: async () => {
                               if (await confirm({ title: "Mark as incorrect?", action: "Mark incorrect", danger: true,
                                 text: <>“{m.item_brief}” will be excluded from the export and not suggested for this line again.</> }))
@@ -352,17 +426,18 @@ export default function ReviewPage() {
   const { notify } = useFeedback();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [descs, setDescs] = useState<Description[] | null>(null);
-  const [open, setOpen] = useState<Set<number>>(new Set());
-  const [view, setView] = useState<View>("all");
+  const [jobs, setJobs] = useState([]);
+  const [descs, setDescs] = useState(null);
+  const [open, setOpen] = useState(new Set());
+  const [view, setView] = useState("all");
   const [extra, setExtra] = useState("");
   const [q, setQ] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [details, setDetails] = useState<{ d: Description; m: Mapping } | null>(null);
-  const [lineInfo, setLineInfo] = useState<Description | null>(null);
-  const [picker, setPicker] = useState<{ d: Description; replacing: Mapping | null } | null>(null);
-  const [editing, setEditing] = useState<Description | null>(null);
+  const [error, setError] = useState(null);
+  const [details, setDetails] = useState(null);
+  const [lineInfo, setLineInfo] = useState(null);
+  const [picker, setPicker] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [reclassing, setReclassing] = useState(null);
   const scrolled = useRef(false);
 
   useEffect(() => { api.jobs().then(setJobs).catch((e) => setError(errorText(e))); }, []);
@@ -383,7 +458,7 @@ export default function ReviewPage() {
     params.delete("line"); setParams(params, { replace: true });
   }, [descs]); // eslint-disable-line
 
-  const act = (fn: () => Promise<unknown>, done: string) => {
+  const act = (fn, done) => {
     setError(null);
     fn().then(() => { notify(done); load(); refreshProgress(); }).catch((e) => notify(errorText(e), "error"));
   };
@@ -391,9 +466,9 @@ export default function ReviewPage() {
   const scoped = useMemo(() => (descs ?? []).filter(inScope), [descs]);
   const all = scoped.flatMap(live);
   const approved = all.filter((m) => m.status === "approved").length;
-  const byView: Record<View, (d: Description) => boolean> = {
+  const byView = {
     all: () => true,
-    attention: (d) => lineStatus(d) === "review" || lineStatus(d) === "matched",
+    attention: (d) => ["review", "matched", "scope_review"].includes(lineStatus(d)),
     approved: (d) => lineStatus(d) === "approved",
     unmatched: (d) => lineStatus(d) === "unmatched",
   };
@@ -401,7 +476,7 @@ export default function ReviewPage() {
   const needle = q.trim().toLowerCase();
   const visible = scoped.filter((d) => byView[view](d) && (!extraTest || extraTest(d, threshold))
     && (!needle || d.description.toLowerCase().includes(needle) || live(d).some((m) => `${m.item_brief} ${m.item_no}`.toLowerCase().includes(needle))));
-  const toggle = (id: number) => { const n = new Set(open); n.has(id) ? n.delete(id) : n.add(id); setOpen(n); };
+  const toggle = (id) => setOpen((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   return (
     <>
@@ -421,7 +496,8 @@ export default function ReviewPage() {
           <Empty icon={<ClipboardCheck size={20} />} title="Nothing to review in this run" text="Every line was outside the selected scope or already mapped." />
         ) : (
           <>
-            <Guide id="review">Open a line to check its components. Approve the right ones, replace or remove the rest, then export.</Guide>
+            <Guide id="review">Open a BOQ line to check the components that will be inserted below it. Approve the right ones, replace or remove the rest,
+              and correct a Cost Sheet Type where needed. Every decision is remembered and improves future runs.</Guide>
 
             <div className="card mb-5 flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
               <div className="min-w-[220px] flex-1">
@@ -455,12 +531,16 @@ export default function ReviewPage() {
                 {visible.map((d) => (
                   <LineSection key={d.id} d={d} open={open.has(d.id)} onToggle={() => toggle(d.id)} act={act}
                     onDetails={(m) => setDetails({ d, m })} onLine={() => setLineInfo(d)}
-                    onPick={(replacing) => setPicker({ d, replacing })} onEdit={() => setEditing(d)} />
+                    onPick={(replacing) => setPicker({ d, replacing })} onEdit={() => setEditing(d)} onReclass={setReclassing} />
                 ))}
               </div>
             )}
-            {descs.length > scoped.length && (
-              <p className="mt-4 text-xs text-slate-400">{descs.length - scoped.length} line{descs.length - scoped.length > 1 ? "s" : ""} outside this run's scope or already mapped are left unchanged.</p>
+            {descs.some(missingUnitQty) && (
+              <p className="mt-4 text-xs text-slate-500">{descs.filter(missingUnitQty).length} BOQ item{descs.filter(missingUnitQty).length > 1 ? "s were" : " was"} skipped
+                because the unit or quantity is missing; they get no components. <Link className="underline" to="/mapping">See them on the mapping page</Link>.</p>
+            )}
+            {descs.length - scoped.length - descs.filter(missingUnitQty).length > 0 && (
+              <p className="mt-1 text-xs text-slate-400">{descs.length - scoped.length - descs.filter(missingUnitQty).length} other line(s) outside this run's scope or already mapped are left unchanged.</p>
             )}
           </>
         )}
@@ -479,6 +559,8 @@ export default function ReviewPage() {
             load(); refreshProgress();
           }} />
       )}
+      {reclassing && job && <Reclassify m={reclassing} types={job.config.cost_sheet_types} onClose={() => setReclassing(null)}
+        onSave={(t, note) => { const m = reclassing; setReclassing(null); act(() => api.reclassify(m.id, t, note), `${m.item_brief}: ${t}, approved`); }} />}
       {editing && <EditSpecs d={editing} onClose={() => setEditing(null)} onSave={(s, n) => {
         const d = editing; setEditing(null);
         act(async () => { await api.editRequirements(d.id, s, n); await api.regenerate(d.id); }, "Specification saved and suggestions regenerated");

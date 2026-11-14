@@ -4,6 +4,7 @@ Same contract as the Claude and OpenAI evaluators: one sales line, its shortlist
 a schema-checked answer, then the same validation against the Item Master.
 """
 import json
+from functools import lru_cache
 
 from google import genai
 from google.genai import errors, types
@@ -19,10 +20,22 @@ STOPPED = {"MAX_TOKENS": "Gemini ran out of output tokens", "SAFETY": "Gemini sa
            "BLOCKLIST": "Gemini declined this request", "SPII": "Gemini declined this request"}
 
 
+@lru_cache(maxsize=1)
+def _shared_client(api_key: str, timeout_s: int) -> genai.Client:
+    """One client for the process, so connections are reused across lines and threads.
+
+    The SDK has no timeout by default: one stalled connection used to hang a whole job. Its
+    own retries on 429/5xx are kept, but capped at two attempts so an overloaded model fails
+    over to rule scoring quickly instead of after a long back-off.
+    """
+    return genai.Client(api_key=api_key, http_options=types.HttpOptions(
+        timeout=timeout_s * 1000, retry_options=types.HttpRetryOptions(attempts=2)))
+
+
 def evaluate(payload: dict, client: genai.Client | None = None) -> ClaudeLineResult:
     """One line, one call. Raises AIUnavailable so the engine can degrade to rule scoring."""
     settings = get_settings()
-    client = client or genai.Client(api_key=settings.gemini_api_key)
+    client = client or _shared_client(settings.gemini_api_key, settings.ai_timeout_seconds)
     try:
         response = client.models.generate_content(
             model=settings.gemini_model,

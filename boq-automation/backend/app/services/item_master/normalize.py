@@ -191,6 +191,23 @@ class Attrs:
             "unit_side": sorted(self.sides), "refrigerant": sorted(self.refrigerants),
         }
 
+    _SETS = ("sizes", "soft_sizes", "sqmm", "core", "gauge", "models", "brands", "materials", "forms", "sides",
+             "refrigerants")
+
+    def dump(self) -> dict:
+        """Lossless JSON form, stored with a knowledge record so it need not be re-derived."""
+        out = {k: sorted(getattr(self, k)) for k in self._SETS}
+        out["dims"] = sorted(list(d) for d in self.dims)
+        out["capacity"] = dict(self.capacity)
+        return out
+
+    @classmethod
+    def load(cls, d: dict) -> "Attrs":
+        a = cls(**{k: set(d.get(k) or []) for k in cls._SETS})
+        a.dims = {tuple(x) for x in d.get("dims") or []}
+        a.capacity = dict(d.get("capacity") or {})
+        return a
+
 
 def norm_model(m: str) -> str:
     return re.sub(r"[-/\s]", "", m)

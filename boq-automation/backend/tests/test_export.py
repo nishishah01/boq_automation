@@ -135,7 +135,7 @@ def test_verifier_catches_a_wrong_cost_sheet_type(tmp_path, sample_boq, parsed, 
     p = plans_for(parsed, indexes.by_no, {"1.1.2.1": ["CO-21405"]})
     p[0].cost_sheet_type = "Lowside Supply"
     info = export_boq(sample_boq, "Sales BOM", p, out)
-    result = verify_export(sample_boq, out, "Sales BOM", info, indexes.by_no)
+    result = verify_export(sample_boq, out, "Sales BOM", info, indexes.by_no, ["Highside Supply", "Highside Installation"])
     assert not result["ok"] and any("Cost Sheet Type" in e for e in result["errors"])
 
 
@@ -160,3 +160,62 @@ def test_special_characters_are_escaped(tmp_path, sample_boq, parsed):
     export_boq(sample_boq, "Sales BOM", [ChildPlan(row, "CO-1", 'A & B <"x">', "Highside Supply", "Component", 0)], out)
     ws = openpyxl.load_workbook(out, data_only=True)["Sales BOM"]
     assert row_of(ws, "1.1.2.1.1")[3].value == 'A & B <"x">'
+
+
+def test_inserted_rows_are_yellow_and_original_rows_keep_their_fill(exported, sample_boq):
+    out, info, _ = exported
+    ws = openpyxl.load_workbook(out)["Sales BOM"]
+    src = openpyxl.load_workbook(sample_boq)["Sales BOM"]
+    for e in info["expected"]:
+        row = row_of(ws, e["unique_no"])
+        assert all(c.fill.fill_type == "solid" and c.fill.fgColor.rgb == "FFFFFF00" for c in row[:22])
+    for old, new in list(info["row_mapping"].items())[2:60]:
+        a, b = ws.cell(new, 22).fill, src.cell(old, 22).fill
+        assert (a.fill_type, a.fgColor.value, a.fgColor.tint) == (b.fill_type, b.fgColor.value, b.fgColor.tint)
+
+
+def test_yellow_rule_outranks_template_rules_only_on_inserted_rows(exported):
+    out, info, _ = exported
+    sheet = zipfile.ZipFile(out).read("xl/worksheets/sheet2.xml").decode()
+    override = re.search(r'<conditionalFormatting sqref="([^"]+)"><cfRule type="expression" dxfId="\d+" '
+                         r'priority="1" stopIfTrue="1">', sheet)
+    assert override
+    covered = set()
+    for part in override.group(1).split():
+        a, b = re.fullmatch(r"A(\d+):[A-Z]+(\d+)", part).groups()
+        covered |= set(range(int(a), int(b) + 1))
+    ws = openpyxl.load_workbook(out, data_only=True)["Sales BOM"]
+    assert covered == {row_of(ws, e["unique_no"])[0].row for e in info["expected"]}
+    priorities = sorted(map(int, re.findall(r'priority="(\d+)"', sheet)))
+    assert priorities[0] == 1 and priorities[1] > 1  # the template's own rules all rank below it
+
+
+def test_verifier_proves_placement_and_yellow_rows(exported, sample_boq, indexes):
+    out, info, _ = exported
+    result = verify_export(sample_boq, out, "Sales BOM", info, indexes.by_no)
+    assert result["checks"]["placement_verified"] == 4  # one block per parent line
+    assert result["checks"]["inserted_rows_yellow"] == 6  # every inserted row, across the row
+
+
+def test_verifier_catches_an_inserted_row_without_yellow(tmp_path, exported, sample_boq, indexes):
+    from openpyxl.styles import PatternFill
+    out, info, _ = exported
+    wb = openpyxl.load_workbook(out, keep_vba=True)
+    ws = wb["Sales BOM"]
+    inserted = next(r for r in range(3, ws.max_row + 1) if ws.cell(r, 22).value == "CO-01354"
+                    and ws.cell(r, 1).fill.fgColor.rgb == "FFFFFF00")
+    ws.cell(inserted, 3).fill = PatternFill(fill_type=None)
+    bad = tmp_path / "unyellow.xlsm"
+    wb.save(bad)
+    result = verify_export(sample_boq, bad, "Sales BOM", info, indexes.by_no)
+    assert not result["ok"] and any("not yellow" in e for e in result["errors"])
+
+
+def test_verifier_catches_a_component_under_the_wrong_parent(tmp_path, exported, sample_boq, indexes):
+    out, info, _ = exported
+    moved = dict(info)
+    # Claim the first block's components belong one row lower than they were written.
+    moved["blocks"] = [dict(b) for b in info["blocks"]]
+    moved["blocks"][0]["block_end"] += 1
+    result = verify_export(sample_boq, out, "Sales BOM", moved, indexes.by_no)
+    assert not result["ok"]

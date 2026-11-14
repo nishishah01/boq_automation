@@ -1,11 +1,9 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, ChevronDown, Info, Lightbulb, Loader2, MoreHorizontal, UploadCloud, X } from "lucide-react";
 
 /* ---------- layout ---------- */
 
-export function PageHeader({ title, subtitle, action, eyebrow }: {
-  title: string; subtitle?: ReactNode; action?: ReactNode; eyebrow?: string;
-}) {
+export function PageHeader({ title, subtitle, action, eyebrow }) {
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
@@ -19,7 +17,7 @@ export function PageHeader({ title, subtitle, action, eyebrow }: {
 }
 
 /** Several figures in one quiet strip, instead of a row of separate cards. */
-export function MetricStrip({ items }: { items: { label: string; value: ReactNode; tone?: "good" | "warn" | "bad"; hint?: string }[] }) {
+export function MetricStrip({ items }) {
   const tone = { good: "text-emerald-700", warn: "text-amber-700", bad: "text-rose-700" };
   return (
     <div className="card grid grid-cols-2 divide-slate-100 sm:flex sm:divide-x">
@@ -33,7 +31,7 @@ export function MetricStrip({ items }: { items: { label: string; value: ReactNod
   );
 }
 
-export function Empty({ icon, title, text, action }: { icon?: ReactNode; title: string; text?: string; action?: ReactNode }) {
+export function Empty({ icon, title, text, action }) {
   return (
     <div className="card flex flex-col items-center px-6 py-14 text-center">
       {icon && <div className="mb-3 rounded-full bg-brand-50 p-3 text-brand-600">{icon}</div>}
@@ -44,11 +42,11 @@ export function Empty({ icon, title, text, action }: { icon?: ReactNode; title: 
   );
 }
 
-export function Spinner({ text = "Loading" }: { text?: string }) {
+export function Spinner({ text = "Loading" }) {
   return <div className="flex items-center gap-2 p-8 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> {text}</div>;
 }
 
-export function ErrorNote({ text }: { text: string | null }) {
+export function ErrorNote({ text }) {
   if (!text) return null;
   return (
     <div className="mb-5 flex items-start gap-2.5 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-sm text-rose-800">
@@ -59,7 +57,7 @@ export function ErrorNote({ text }: { text: string | null }) {
 
 /* ---------- status ---------- */
 
-const STATUS: Record<string, [string, string]> = {
+const STATUS = {
   // label, dot colour
   matched: ["Matched", "bg-brand-500"], approved: ["Approved", "bg-emerald-500"], verified: ["Verified", "bg-emerald-500"],
   completed: ["Completed", "bg-emerald-500"], ready: ["Ready", "bg-emerald-500"],
@@ -67,9 +65,15 @@ const STATUS: Record<string, [string, string]> = {
   running: ["Running", "bg-brand-500"], processing: ["Processing", "bg-brand-500"],
   unmatched: ["Unmatched", "bg-rose-500"], rejected: ["Rejected", "bg-rose-500"], failed: ["Failed", "bg-rose-500"],
   skipped: ["Out of scope", "bg-slate-300"], preserved: ["Already mapped", "bg-slate-300"],
+  incomplete: ["Skipped – Unit/Qty missing", "bg-slate-400"],
+  scope_review: ["Review – outside Highside scope", "bg-amber-500"],
+  indexed: ["Indexed", "bg-emerald-500"], duplicate: ["Duplicate", "bg-slate-400"],
+  ingested: ["Ingested", "bg-emerald-500"], partial: ["Partially ingested", "bg-amber-500"],
+  no_mappings: ["No Highside mappings", "bg-slate-300"], changed: ["Changed – reprocess", "bg-amber-500"],
+  unsupported: ["Unsupported", "bg-slate-300"], ignored: ["Ignored", "bg-slate-300"], scanning: ["Scanning", "bg-brand-500"],
 };
 
-export function Status({ status }: { status: string }) {
+export function Status({ status }) {
   const [label, dot] = STATUS[status] ?? [status, "bg-slate-400"];
   const pulse = status === "running" || status === "processing";
   return (
@@ -79,7 +83,7 @@ export function Status({ status }: { status: string }) {
   );
 }
 
-export function Progress({ value, tone = "brand" }: { value: number; tone?: "brand" | "good" }) {
+export function Progress({ value, tone = "brand" }) {
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
       <div className={`h-full rounded-full transition-all duration-500 ${tone === "good" ? "bg-emerald-500" : "bg-brand-500"}`}
@@ -90,19 +94,19 @@ export function Progress({ value, tone = "brand" }: { value: number; tone?: "bra
 
 /* ---------- guidance ---------- */
 
-export function InfoTip({ text }: { text: string }) {
+export function InfoTip({ text }) {
   return (
     <span className="group relative inline-flex">
       <Info size={13} className="cursor-help text-slate-400" tabIndex={0} aria-label={text} />
       <span role="tooltip" className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-60 -translate-x-1/2 rounded-lg bg-slate-900
-        px-3 py-2 text-xs font-normal normal-case leading-relaxed tracking-normal text-white opacity-0 shadow-pop transition-opacity
-        group-hover:opacity-100 group-focus-within:opacity-100">{text}</span>
+        px-3 py-2 text-xs font-normal normal-case leading-relaxed tracking-normal text-white shadow-pop
+        hidden group-hover:block group-focus-within:block">{text}</span>
     </span>
   );
 }
 
 /** A small, dismissible hint. Dismissal is remembered in this browser. */
-export function Guide({ id, children }: { id: string; children: ReactNode }) {
+export function Guide({ id, children }) {
   const key = `guide.${id}`;
   const [open, setOpen] = useState(() => { try { return localStorage.getItem(key) !== "hidden"; } catch { return true; } });
   if (!open) return null;
@@ -120,17 +124,15 @@ export function Guide({ id, children }: { id: string; children: ReactNode }) {
 
 /* ---------- overlays ---------- */
 
-function useEscape(onClose: () => void) {
+function useEscape(onClose) {
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const h = (e) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
 }
 
-export function Modal({ title, subtitle, onClose, children, footer, size = "md" }: {
-  title: string; subtitle?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode; size?: "sm" | "md" | "lg";
-}) {
+export function Modal({ title, subtitle, onClose, children, footer, size = "md" }) {
   useEscape(onClose);
   const width = { sm: "max-w-md", md: "max-w-xl", lg: "max-w-3xl" }[size];
   return (
@@ -148,9 +150,7 @@ export function Modal({ title, subtitle, onClose, children, footer, size = "md" 
   );
 }
 
-export function Drawer({ title, subtitle, onClose, children, footer }: {
-  title: string; subtitle?: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode;
-}) {
+export function Drawer({ title, subtitle, onClose, children, footer }) {
   useEscape(onClose);
   return (
     <div className="fixed inset-0 z-40 bg-slate-900/25 backdrop-blur-[1px] animate-fade-in" onMouseDown={onClose}>
@@ -169,14 +169,12 @@ export function Drawer({ title, subtitle, onClose, children, footer }: {
 }
 
 /** A compact menu for secondary actions, so rows show only the main ones. */
-export function Menu({ items, label = "More actions" }: {
-  items: { label: string; icon?: ReactNode; onClick: () => void; danger?: boolean; hidden?: boolean }[]; label?: string;
-}) {
+export function Menu({ items, label = "More actions" }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef(null);
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const h = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
@@ -197,7 +195,7 @@ export function Menu({ items, label = "More actions" }: {
   );
 }
 
-export function Disclosure({ title, children, defaultOpen = false }: { title: ReactNode; children: ReactNode; defaultOpen?: boolean }) {
+export function Disclosure({ title, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div>
@@ -211,9 +209,7 @@ export function Disclosure({ title, children, defaultOpen = false }: { title: Re
 
 /* ---------- inputs ---------- */
 
-export function Segmented<T extends string>({ value, onChange, options }: {
-  value: T; onChange: (v: T) => void; options: { value: T; label: string; count?: number }[];
-}) {
+export function Segmented({ value, onChange, options }) {
   return (
     <div className="inline-flex flex-wrap rounded-lg bg-slate-100 p-1" role="tablist">
       {options.map((o) => (
@@ -226,15 +222,17 @@ export function Segmented<T extends string>({ value, onChange, options }: {
   );
 }
 
-export function FileDrop({ accept, label, hint, onFile, busy, progress, compact }: {
-  accept: string; label: string; hint?: string; onFile: (f: File) => void; busy: boolean; progress: number; compact?: boolean;
-}) {
-  const input = useRef<HTMLInputElement>(null);
+export function FileDrop({ accept, label, hint, onFile, onFiles, busy, progress, compact }) {
+  const take = (list) => {
+    const files = Array.from(list ?? []);
+    if (onFiles) { if (files.length) onFiles(files); } else if (files[0]) onFile(files[0]);
+  };
+  const input = useRef(null);
   const [over, setOver] = useState(false);
   return (
     <button type="button" disabled={busy} onClick={() => input.current?.click()}
       onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
-      onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}
+      onDrop={(e) => { e.preventDefault(); setOver(false); take(e.dataTransfer.files); }}
       className={`flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed text-sm transition
         ${compact ? "p-5" : "p-9"} ${over ? "border-brand-400 bg-brand-50" : "border-slate-200 bg-slate-50/50 hover:border-brand-300 hover:bg-brand-50/30"}`}>
       <div className="rounded-full bg-white p-2.5 text-brand-600 shadow-sm">
@@ -242,12 +240,13 @@ export function FileDrop({ accept, label, hint, onFile, busy, progress, compact 
       </div>
       <span className="font-medium text-slate-800">{busy ? `Uploading ${progress}%` : label}</span>
       <span className="text-xs text-slate-500">{hint ?? `${accept} files`}</span>
-      <input ref={input} type="file" accept={accept} hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
+      <input ref={input} type="file" accept={accept} hidden multiple={Boolean(onFiles)}
+        onChange={(e) => { take(e.target.files); e.target.value = ""; }} />
     </button>
   );
 }
 
-export function FileSummary({ name, meta, status, action }: { name: string; meta: string; status: string; action?: ReactNode }) {
+export function FileSummary({ name, meta, status, action }) {
   return (
     <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
       <div className="rounded-lg bg-emerald-50 p-2 text-emerald-600"><CheckCircle2 size={18} /></div>
@@ -261,7 +260,7 @@ export function FileSummary({ name, meta, status, action }: { name: string; meta
   );
 }
 
-export function PreviewTable({ rows, maxCols = 14 }: { rows: string[][]; maxCols?: number }) {
+export function PreviewTable({ rows, maxCols = 14 }) {
   return (
     <div className="max-h-[60vh] overflow-auto rounded-lg border border-slate-200">
       <table className="w-full text-xs">
@@ -277,7 +276,7 @@ export function PreviewTable({ rows, maxCols = 14 }: { rows: string[][]; maxCols
   );
 }
 
-export function Confidence({ value, threshold }: { value: number; threshold: number }) {
+export function Confidence({ value, threshold }) {
   const low = value < threshold;
   return (
     <div className="flex items-center gap-2.5">
@@ -288,9 +287,29 @@ export function Confidence({ value, threshold }: { value: number; threshold: num
   );
 }
 
-export const dateText = (s: string) => new Date(s).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+export const dateText = (s) => new Date(s).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-export const engineName = (mode: string) =>
-  ({ claude: "Claude", openai: "OpenAI", gemini: "Gemini", manual: "Manual", mock: "Rule-based", rule: "Rule-based" } as Record<string, string>)[mode] ?? "Rule-based";
+export const engineName = (mode) =>
+  ({ claude: "Claude", openai: "OpenAI", gemini: "Gemini", manual: "Manual", mock: "Rule-based", rule: "Rule-based" })[mode] ?? "Rule-based";
 
-export const COST_SHEET_TIP = "Taken directly from this component's Item Master record. It is never guessed and is written to column H on export.";
+export const COST_SHEET_TIP = "The recommended classification written on export. Verified historical BOQs take priority, then "
+  + "approved review corrections, then the Item Master's own value, which is always shown alongside.";
+
+const CLASS_SOURCE = {
+  historical: ["Verified BOQs", "bg-emerald-50 text-emerald-700 ring-emerald-600/20"],
+  feedback: ["Approved reviews", "bg-sky-50 text-sky-700 ring-sky-600/20"],
+  manual: ["Engineer correction", "bg-violet-50 text-violet-700 ring-violet-600/20"],
+  item_master: ["Item Master", "bg-slate-50 text-slate-600 ring-slate-500/20"],
+};
+
+/** Where a Cost Sheet Type came from, with the Item Master's value when it differs. */
+export function ClassSource({ m, showMaster = true }) {
+  const [label, tone] = CLASS_SOURCE[m.classification_source] ?? CLASS_SOURCE.item_master;
+  const differs = m.master_cost_sheet_type && m.master_cost_sheet_type !== m.cost_sheet_type;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset ${tone}`} title={m.classification_note || undefined}>{label}</span>
+      {showMaster && differs && <span className="text-[11px] text-slate-500">Item Master: {m.master_cost_sheet_type}</span>}
+    </span>
+  );
+}
